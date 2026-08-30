@@ -1,11 +1,11 @@
-<a id="chinese"></a>
+<a id="italian"></a>
 
 <p align="center">
   <img src="assets/Voicemem_logo.webp" alt="VoiceMem Logo" width="100%">
 </p>
 
 <p align="center">
-  <strong>中文</strong> | <a href="#english">English</a>
+  <strong>Italiano</strong> | <a href="#english">English</a>
 </p>
 
 <p align="center">
@@ -34,61 +34,61 @@
   </a>
 </div>
 <p align="center">
-  <img src="assets/wechat.jpg" alt="VoiceMem 微信群" width="60%">
+  <img src="assets/wechat.jpg" alt="Gruppo WeChat di VoiceMem" width="60%">
 </p>
 
 ---
 
-我们带来 **VoiceMem**，为语音模型增加最后一个组件：灵魂，让它真正越来越懂你。VoiceMem 建立在<strong>「流式双脑」</strong>架构之上，提供**精准、有情感、懂人格、低延迟且最便宜的记忆服务**。本仓库将<strong>「永久保持全部开源」</strong>。
+Presentiamo **VoiceMem**, il componente finale per i modelli vocali: un'anima che permette loro di conoscerti davvero sempre meglio. VoiceMem si basa su un'architettura **a doppio cervello in streaming** e offre un servizio di memoria **preciso, emotivo, consapevole della personalità, a bassa latenza e a costi minimi**. Questo repository resterà **completamente open source per sempre**.
 
-快速理解 VoiceMem：
+Una panoramica rapida di VoiceMem:
 
-* **左脑：** 直接管理信息，在 Top-3 限制下维持 Mem0 的满载性能。
-* **右脑：** 用长短期情绪归因管理「情商」，含交叉节点、与左脑信息联合维护。
-* **低延迟：** 通过压缩信息、分层存储、流式查询（0–300 ms 投机预取），几乎不增加延迟。
-* **简单实用：** 单轮查询约 300 token；架构全部解耦，全部组件（含底层记忆引擎）都可更换。
+* **Cervello sinistro:** gestisce direttamente le informazioni e mantiene le prestazioni complete di Mem0 con un limite di Top-3 memorie.
+* **Cervello destro:** gestisce l'intelligenza emotiva tramite l'attribuzione delle emozioni a breve e lungo termine, con nodi tra entità e manutenzione congiunta delle informazioni del cervello sinistro.
+* **Bassa latenza:** comprime le informazioni, usa l'archiviazione gerarchica e il recupero in streaming con prefetch speculativo da 0 a 300 ms, aggiungendo una latenza quasi nulla.
+* **Semplice e pratico:** ogni query usa circa 300 token. L'architettura è completamente disaccoppiata e ogni componente, incluso il motore di memoria sottostante, può essere sostituito.
 
 <p align="center">
-  <img src="assets/teaser.webp" alt="VoiceMem 总览" width="100%">
+  <img src="assets/teaser.webp" alt="Panoramica di VoiceMem" width="100%">
 </p>
 
-## 🔥 News
+## 🔥 Novità
 
-* **08/27/2026 · v0.0.1** — 发布初代 **VoiceMem** 和 **Technical Report**。
+* **27/08/2026 · v0.0.1** — Pubblicati la prima versione di **VoiceMem** e il **Technical Report**.
 
 ## 🎬 Demo
 
-> **注意：** 播放前需要先取消静音。
+> **Nota:** disattiva l'audio prima di avviare il video.
 
 https://github.com/user-attachments/assets/0d919f8c-e9ba-4fdb-8078-b049e4b99a28
 
 
-## 📚 目录
-* [🚀 快速开始](#-快速开始)
-* [🧠 VoiceMem 双脑流式架构](#-voicemem基于流式双脑架构的记忆系统)
-* [🤖 VoiceMem 官方记忆模型](#-voicemem-模型系列)
-* [🔌 使用 VoiceMem 定制你的语音智能体](#-使用-voicemem-定制你的语音智能体)
-* [🛠️ 模型微调](#️-模型微调)
-* [📊 评测代码](#-评测)
-* [致谢](#致谢)
-* [许可证](#许可证)
+## 📚 Indice
+* [🚀 Avvio rapido](#-avvio-rapido)
+* [🧠 Architettura a doppio cervello in streaming di VoiceMem](#-voicemem-sistema-di-memoria-con-architettura-a-doppio-cervello-in-streaming)
+* [🤖 Famiglie di modelli VoiceMem](#-famiglie-di-modelli-voicemem)
+* [🔌 Personalizza il tuo agente vocale con VoiceMem](#-personalizza-il-tuo-agente-vocale-con-voicemem)
+* [🛠️ Fine-tuning dei modelli](#️-fine-tuning-dei-modelli)
+* [📊 Valutazione](#-valutazione)
+* [Ringraziamenti](#ringraziamenti)
+* [Licenza](#licenza)
 
-## 🚀 快速开始
+## 🚀 Avvio rapido
 
-### 安装
+### Installazione
 
 ```bash
 git clone https://github.com/lang-jiaqi/Voicemem_open.git
 cd Voicemem_open
 
-# 安装记忆系统（含 ASR / 声纹 / 场景 / 情绪 / 本地 embedding 全套内置组件）
+# Installa il sistema di memoria (include ASR / identificazione del parlante / scena / emozioni / embedding locali)
 pip install voicemem
 
-# 可选：用我们微调的 Qwen 回复模型
+# Opzionale: usa il nostro modello Qwen per le risposte, sottoposto a fine-tuning
 pip install "voicemem[slm]"
 ```
 
-### 下载所需模型
+### Download dei modelli richiesti
 
 ```bash
 pip install -U huggingface_hub
@@ -96,9 +96,9 @@ pip install -U huggingface_hub
 hf download zhifeixie/VoiceMem_Default_Models_Env --local-dir ./models
 ```
 
-### 基础用法 <a id="interfaces"></a>
+### Utilizzo di base <a id="interfaces"></a>
 
-#### 作为离线记忆引擎运行
+#### Esecuzione come motore di memoria offline
 
 ```python
 from voicemem import VoiceMem
@@ -109,40 +109,41 @@ vm = VoiceMem(
     top_k=5,
 )
 
-# 本地模型是懒加载的，先热起来，别让第一次调用去等加载
+# I modelli locali vengono caricati in modo lazy: riscaldali per evitare attese alla prima chiamata
 vm.warmup()
 
-# 存：音频文件
-# 内部跑 ASR / 声纹 / 场景 / 情绪感知 / Embedding 抽取
-print("入库开始")
-vm.ingest(audio="assets/input.wav")  # 我是素食主义者，对坚果过敏。
-print("入库结束")
+# Memorizza un file audio.
+# VoiceMem esegue internamente ASR / identificazione del parlante / scena / emozioni / estrazione degli embedding.
+print("inizio ingest")
+vm.ingest(audio="assets/input.wav")  # Sono vegetariano e allergico alla frutta secca.
+print("fine ingest")
 
-# 查：写入慢是因为要抽事实、打标签、建图；查询走的是纯向量检索，跟写入无关
-print("检索开始")
-result = vm.search("我的饮食禁忌是什么？")
-print("检索结束")
+# La scrittura è lenta perché estrae fatti, assegna tag e costruisce il grafo.
+# La lettura è una ricerca vettoriale pura, indipendente dal costo di scrittura.
+print("inizio ricerca")
+result = vm.search("Quali sono le mie restrizioni alimentari?")
+print("fine ricerca")
 
 print(result.result_leftbrain, result.result_rightbrain)
 
 
-# 存：左脑信息文本（无情感）
+# Memorizza direttamente testo fattuale nel cervello sinistro (senza informazioni emotive).
 vm = VoiceMem(
     mode="leftbrain_only",
     openai_key="api_xxx",
     top_k=5,
 )
 
-vm.ingest("我是素食主义者，对坚果过敏。")
+vm.ingest("Sono vegetariano e allergico alla frutta secca.")
 
-result = vm.search("我的饮食禁忌是什么？")
+result = vm.search("Quali sono le mie restrizioni alimentari?")
 ```
 
-#### 以流式方式运行 VoiceMem
+#### Esecuzione di VoiceMem in modalità streaming
 
-可以把 VoiceMem 的流式接口看作一个持续处理音频的 VAD 接口。
+L'interfaccia streaming di VoiceMem può essere considerata un'interfaccia VAD che elabora continuamente l'audio.
 
-下面这段：先显式存一条事实，再喂一段**问句**音频，看记忆是怎么在人还没说完时就查好的；最后照例走一次入库判断。
+L'esempio seguente memorizza prima esplicitamente un fatto, poi invia una traccia audio contenente una **domanda** per mostrare come la memoria venga recuperata prima che il parlante finisca di parlare; infine esegue la normale decisione di ingest.
 
 ```python
 import asyncio
@@ -154,30 +155,30 @@ import soundfile as sf
 
 from voicemem import VoiceMem
 
-# 沿用上面那个 vm；单独跑这段就自己建一个
+# Riutilizza il vm precedente; ne crea uno qui per eseguire il blocco in autonomia
 vm = VoiceMem(mode="normal", openai_key=os.environ["OPENAI_API_KEY"], top_k=5)
 
-# 本地模型是懒加载的，先热起来，别让第一块音频去等模型加载
+# I modelli locali vengono caricati in modo lazy: riscaldali per evitare attese al primo blocco audio
 vm.warmup()
 
-# 先存一条事实，等下那个问句才有东西可查
-vm.ingest("我是素食主义者，对坚果过敏。")
+# Memorizza prima un fatto, così la domanda seguente avrà qualcosa da trovare
+vm.ingest("Sono vegetariano e allergico alla frutta secca.")
 
 SPEC_MIN_CHARS = 6          
 searching = False
 
 
 def on_partial(text):
-    """边说边出字。够长了就说明后台这一刻已经开查了。"""
+    """Mostra la trascrizione parziale; se è abbastanza lunga, la ricerca è già iniziata."""
     global searching
     print(f"\r[partial] {text}", end="", flush=True)
     if not searching and len(text) >= SPEC_MIN_CHARS:
         searching = True
-        print("\n[检索开始] 人还没说完，后台已经在查了", flush=True)
+        print("\n[inizio ricerca] il parlante non ha ancora finito, ma il recupero è già in corso", flush=True)
 
 
 async def main():
-    # 这段音频里是一个问句：「我的饮食禁忌是什么？」
+    # Questa traccia audio contiene la domanda: "Quali sono le mie restrizioni alimentari?"
     audio, sr = sf.read("assets/question.wav", dtype="float32")
     pcm = (np.clip(audio, -1, 1) * 32767).astype(np.int16)
 
@@ -189,105 +190,105 @@ async def main():
         if st.state != "turn_over":                
             continue
 
-        # VAD 确认这一轮说完了。记忆早在说话过程中就查好了，这里直接取，不再等
-        print("[检索结束]")
-        print("转写  ", st.transcript)
-        print("左脑  ", st.result_leftbrain)         
-        print("右脑  ", st.result_rightbrain)
+        # Il VAD conferma la fine del turno. La memoria è stata recuperata durante il parlato: basta leggerla
+        print("[fine ricerca]")
+        print("trascrizione  ", st.transcript)
+        print("cervello sinistro  ", st.result_leftbrain)
+        print("cervello destro  ", st.result_rightbrain)
         pprint({k: getattr(st, k) for k in
                 ["speaker_id", "speaker_voiceprint", "emotion",
                  "entity", "schema", "text_embedding"]})
 
-        # 每一轮都要走一次入库判断
-        print("[入库] LLM 正在判断这句话值不值得入库…", flush=True)
+        # Ogni turno esegue una decisione di ingest
+        print("[ingest] l'LLM sta decidendo se vale la pena memorizzare questa frase...", flush=True)
         res = vm.ingest(st.transcript)
-        print(f"[入库] 抽出 {res['facts_count']} 条事实 -> {res['memory_ids']}")
+        print(f"[ingest] estratti {res['facts_count']} fatti -> {res['memory_ids']}")
        
 
 
 asyncio.run(main())
 ```
 
-### VoiceMem 交互式演示
+### Demo interattiva con VoiceMem
 
-演示代码在仓库里（pip 装的包只有库本身），先确认已经克隆并进入仓库目录。
+Il codice della demo si trova nel repository (il pacchetto installato con pip contiene solo la libreria); assicurati di aver clonato il repository e di trovarti nella sua directory principale.
 
 ```bash
 python web/run.py
 ```
 
-然后访问：
+Poi apri:
 
 ```text
 http://localhost:8787
 ```
 
-## 🧠 VoiceMem：基于流式双脑架构的记忆系统
+## 🧠 VoiceMem: sistema di memoria con architettura a doppio cervello in streaming
 
-**VoiceMem** 是一个面向实时语音智能体的记忆系统。
+**VoiceMem** è un sistema di memoria progettato per agenti vocali in tempo reale.
 
-VoiceMem 不把所有记忆放进同一个检索数据库，而是将记忆拆分成两个互相配合的部分：
-
-<p align="center">
-  <img src="docs/images/fig-architecture.webp" alt="VoiceMem 系统架构" width="80%">
-</p>
-
-* **左脑**通过 Schema 和 Entity 组织事实记忆，用于更加准确地检索信息。
-* **右脑**通过独立节点和跨实体节点管理人格、情绪和关系信息。
+Invece di archiviare ogni tipo di memoria in un unico database di ricerca, VoiceMem separa la memoria in due parti complementari:
 
 <p align="center">
-  <img src="docs/images/stages.webp" alt="VoiceMem 处理流程" width="90%">
+  <img src="docs/images/fig-architecture.webp" alt="Architettura di VoiceMem" width="80%">
 </p>
 
-整个流程都是**流式**的。
+* Il **cervello sinistro** organizza la memoria fattuale tramite schemi ed entità, per recuperare le informazioni con maggiore precisione.
+* Il **cervello destro** gestisce personalità, emozioni e relazioni tramite nodi indipendenti e nodi tra entità.
 
-在用户仍然说话时，VoiceMem 会持续完成音频分段、语音转写、记忆提取，并把结构化信息写入记忆图中。
+<p align="center">
+  <img src="docs/images/stages.webp" alt="Pipeline di elaborazione di VoiceMem" width="90%">
+</p>
 
-查询时，VoiceMem 会**先路由，再排序，最后只把 Top-K 条记忆注入模型上下文**，从而在保留相关信息的同时控制上下文长度。
+L'intera pipeline è **in streaming**.
 
-### 主要特性
+Mentre l'utente sta ancora parlando, VoiceMem segmenta continuamente l'audio, trascrive il parlato, estrae le memorie utili e scrive le informazioni strutturate nel grafo della memoria.
 
-* 🎯 **精准** — 在 **LoCoMo 上达到 91.2%**，Mem0 为 **61.68%**，并且只需要 **Top-5** 条记忆。
-* ❤️ **有情感、懂人格** — 不只记住**用户说过什么**，还会记住**用户是谁、用户有什么感受**。在 **PersonaMem 上达到 69.44%**。
-* 🎧 **多模态** — 可以从真实世界音频中记住**语音、说话人、声音事件、多人对话和音乐**。
-* ⚡ **低延迟** — 响应时间为 **134 ms**，Mem0 为 **1,440 ms**，并支持在语音轮次内部进行流式检索。
-* 💰 **低 Token 消耗** — 每次只使用 **430 个记忆 token**，Mem0 为 **6,956**，EverMemOS 为 **1,899**。
+Durante una query, VoiceMem **esegue prima il routing, poi il ranking e infine inserisce nel contesto del modello solo le memorie Top-K**, mantenendo il contesto compatto e conservando le informazioni più rilevanti.
+
+### Caratteristiche principali
+
+* 🎯 **Preciso** — Raggiunge **91,2% su LoCoMo**, rispetto al **61,68% di Mem0**, usando solo **Top-5** memorie.
+* ❤️ **Emotivo e personale** — Ricorda non solo **cosa ha detto l'utente**, ma anche **chi è e come si sente**. Raggiunge **69,44% su PersonaMem**.
+* 🎧 **Multimodale** — Ricorda **parlato, parlanti, eventi sonori, conversazioni con più interlocutori e musica** da audio del mondo reale.
+* ⚡ **Veloce** — Risponde in **134 ms**, rispetto ai **1.440 ms di Mem0**, con recupero streaming durante il turno vocale.
+* 💰 **Basso consumo di token** — Usa solo **430 token di memoria**, rispetto ai **6.956 di Mem0** e ai **1.899 di EverMemOS**.
 
 
 
-## 🤖 VoiceMem 模型系列
+## 🤖 Famiglie di modelli VoiceMem
 
-我们通过三阶段 OPD 训练流程构建 **ChatMem-400K**：
+Costruiamo **ChatMem-400K** tramite una pipeline di training OPD in tre fasi:
 
 1. **Memory-world construction**
 2. **SLM-validated online on-policy distillation（OPD）**
 3. **Human refinement**
 
-同一套流程在人工编辑后形成 **ChatMem-Bench**，评测语音模型是否能够在长期沉淀中形成对用户的理解。
+La stessa pipeline, dopo la revisione umana, produce **ChatMem-Bench**, che valuta se un modello vocale sia in grado di sviluppare nel tempo una comprensione dell'utente.
 
-VoiceMem 家族开源模型包括 **Qwen2.5-Omni、Qwen3-Omni 和 Step-Audio2-Mini**。这些模型可以在对话时接受并理解 VoiceMem 提供的记忆信息。
+La famiglia di modelli open source di VoiceMem include **Qwen2.5-Omni, Qwen3-Omni e Step-Audio2-Mini**. Questi modelli possono ricevere e comprendere le informazioni di memoria fornite da VoiceMem durante le conversazioni.
 
 <p align="center">
-  <img src="docs/images/fig-opd.webp" alt="VoiceMem OPD 流程" width="90%">
+  <img src="docs/images/fig-opd.webp" alt="Pipeline OPD di VoiceMem" width="90%">
 </p>
 
-## 🔌 使用 VoiceMem 定制你的语音智能体
+## 🔌 Personalizza il tuo agente vocale con VoiceMem
 
-你可以将 VoiceMem 接入自己的语音模型，用于构建带有长期记忆能力的实时语音智能体。
+Puoi integrare VoiceMem con il tuo modello vocale per costruire un agente vocale in tempo reale dotato di memoria a lungo termine.
 
-整体流程如下：
+Il flusso di base è:
 
-**麦克风 → VoiceMem 监听语音并提前检索相关记忆 → 你的模型读取这些记忆并生成回答**
+**microfono → VoiceMem ascolta e recupera in anticipo le memorie rilevanti → il tuo modello legge le memorie e genera una risposta**
 
 ```bash
 export OPENAI_API_KEY=sk-...
-# 仅在写入记忆时用于事实信息提取。
-# 记忆检索完全在本地运行。
+# Usata solo per l'estrazione dei fatti durante la scrittura delle memorie.
+# Il recupero delle memorie è interamente locale.
 
 python examples/03_simple_agent_with_voicemem_memory.py
 ```
 
-换成你自己的模型：把生成那一步换掉就行，记忆那半边一行都不用动。
+Per usare il tuo modello, sostituisci il passaggio di generazione: la parte relativa alla memoria resta invariata.
 
 ```python
 def my_reply(text, memory_context):        # 同步函数也可以，会自动丢线程
@@ -296,13 +297,13 @@ def my_reply(text, memory_context):        # 同步函数也可以，会自动�
 vm = VoiceMem(reply=my_reply)
 ```
 
-## 🛠️ 模型微调
+## 🛠️ Fine-tuning dei modelli
 
-VoiceMem 提供完整的微调代码，可用于训练自己的 VoiceMem Model Family Adapter。
+VoiceMem fornisce l'intera pipeline di fine-tuning per addestrare un adapter della tua VoiceMem Model Family.
 
-默认训练配置与发布的 `checkpoint-3318` 使用的配置一致。
+La configurazione di training predefinita corrisponde a quella usata per il `checkpoint-3318` pubblicato.
 
-使用默认参数运行下面的命令，可以复现相同的 Adapter：
+Eseguendo il comando seguente con le impostazioni predefinite puoi riprodurre lo stesso adapter:
 
 ```bash
 pip install ms-swift==4.5.2 bitsandbytes
@@ -310,31 +311,31 @@ pip install ms-swift==4.5.2 bitsandbytes
 python finetune/train.py --data data/train.jsonl
 ```
 
-训练数据格式、GPU 显存要求，以及如何更换基础模型，请参阅 **[finetune/README.md](finetune/README.md)**。
+Per il formato dei dati di training, i requisiti di memoria GPU e le istruzioni per usare un modello di base diverso, consulta **[finetune/README.md](finetune/README.md)**.
 
-## 📊 评测
+## 📊 Valutazione
 
-评测流程完全开源，并且可以复现。
+La pipeline di valutazione è completamente open source e riproducibile.
 
 <p align="center">
-  <img src="assets/evaluation.webp" alt="VoiceMem 评测结果" width="100%">
+  <img src="assets/evaluation.webp" alt="Risultati della valutazione di VoiceMem" width="100%">
 </p>
 
-### 运行评测
+### Esecuzione della valutazione
 
-只需要一条命令即可运行 Benchmark：
+Puoi avviare un benchmark con un solo comando:
 
 ```bash
 export OPENAI_API_KEY=sk-...
 
-# 建议先运行仓库中自带的小型示例，
-# 确认环境和配置没有问题。
-# 2 个对话，5 个问题。
+# Inizia con il piccolo esempio incluso nel repository
+# per verificare che l'ambiente sia configurato correttamente.
+# 2 conversazioni, 5 domande.
 python evaluation/run.py \
     --dataset locomo \
     --data evaluation/examples/locomo_sample.json
 
-# 然后运行完整数据集。
+# Poi esegui il dataset completo.
 python evaluation/run.py \
     --dataset locomo \
     --data data/locomo.json
@@ -355,9 +356,9 @@ Median retrieval latency: 12 ms
 Median retrieved memory: 298 tokens
 ```
 
-在运行完整评测之前，可以加入 `--inspect`，检查数据集是否被正确解析。
+Prima di eseguire una valutazione completa, aggiungi `--inspect` per verificare come viene analizzato il dataset.
 
-这个模式不会调用模型，因此也不会产生 API 费用：
+Questa modalità non chiama il modello e non genera costi API:
 
 ```bash
 python evaluation/run.py \
@@ -366,28 +367,28 @@ python evaluation/run.py \
     --inspect
 ```
 
-评测过程中，回答模型**只会收到检索得到的记忆**，不会收到原始对话历史。
+Durante la valutazione, il modello che genera le risposte riceve **solo le memorie recuperate**, non la cronologia originale della conversazione.
 
-如果直接把完整对话交给模型，Benchmark 测试的就会变成模型的阅读理解能力，而不是记忆系统本身的能力。
+Se il modello ricevesse la conversazione completa, il benchmark valuterebbe la sua capacità di comprensione del testo invece di quella del sistema di memoria.
 
-完整评测流程，以及添加新 Benchmark 的方法，请参阅 **[evaluation/README.md](evaluation/README.md)**。添加一个新的 Benchmark 只需要增加一个文件并实现两个函数。
+Per il protocollo completo di valutazione e le istruzioni per aggiungere un nuovo benchmark, consulta **[evaluation/README.md](evaluation/README.md)**. Aggiungere un benchmark richiede solo un file e due funzioni.
 
-## 致谢
+## Ringraziamenti
 
-我们感谢以下优秀的开源项目：
+Ringraziamo i seguenti eccellenti progetti open source:
 
 * [mem0](https://github.com/mem0ai/mem0) — 向量记忆引擎
 * [FunASR](https://github.com/modelscope/FunASR) — 基于 `paraformer-zh-streaming` 的流式 ASR
 * [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) — Silero VAD、3D-Speaker 说话人验证，以及备用流式 ASR
 * [intfloat/multilingual-e5](https://huggingface.co/intfloat/multilingual-e5-small) — 本地 Embedding 和 Slot 分类
 
-VoiceMem 同时使用 OpenAI API 提供 Chat、TTS 和 Realtime 功能。
+VoiceMem usa inoltre le API OpenAI per le funzionalità Chat, TTS e Realtime.
 
-## 许可证
+## Licenza
 
-VoiceMem 基于 **Apache License 2.0** 开源。
+VoiceMem è distribuito come open source secondo la **Apache License 2.0**.
 
-详细信息请参阅 [LICENSE](LICENSE)。
+Per i dettagli, consulta [LICENSE](LICENSE).
 
 <br>
 
