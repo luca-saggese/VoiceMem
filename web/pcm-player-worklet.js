@@ -97,7 +97,7 @@ class VoiceMemPCMPlayer extends AudioWorkletProcessor {
     if (!output) return true;
     output.fill(0);
 
-    // 候选插话期间输出静音并保留队列，resume 后从暂停位置继续。
+    // Durante l'interruzione candidata emette silenzio e mantiene la coda, riprende dalla posizione di pausa dopo il resume.
     if (this.paused) return true;
 
     if (!this.started) {
