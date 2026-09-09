@@ -54,7 +54,9 @@ class CosyVoice3TTS:
         if default_language not in ("it", "en"):
             raise ValueError("CosyVoice supporta solo le lingue it ed en")
         self.model_path = model or os.environ.get("VOICEMEM_COSYVOICE_MODEL") or self.MODEL_ID
-        self.ref_audio = ref_audio or os.environ.get("VOICEMEM_COSYVOICE_REF_AUDIO")
+        default_ref = Path(__file__).resolve().parents[1] / "assets" / "italian.wav"
+        self.ref_audio = (ref_audio or os.environ.get("VOICEMEM_COSYVOICE_REF_AUDIO")
+                  or (str(default_ref) if default_ref.is_file() else None))
         self.default_language = default_language
         self.speed = speed
         self.load_trt = load_trt
@@ -69,6 +71,13 @@ class CosyVoice3TTS:
             with self._load_lock:
                 if self._model is None:
                     try:
+                        import sys
+                        repo_root = Path(__file__).resolve().parents[1]
+                        cosy_root = repo_root / "third_party" / "CosyVoice"
+                        matcha_root = cosy_root / "third_party" / "Matcha-TTS"
+                        for path in (cosy_root, matcha_root):
+                            if path.is_dir() and str(path) not in sys.path:
+                                sys.path.insert(0, str(path))
                         from cosyvoice.cli.cosyvoice import AutoModel
                     except ImportError as exc:
                         raise RuntimeError(

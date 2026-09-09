@@ -37,9 +37,15 @@ import numpy as np
 #: "odia quando mangia rumorosamente" ↔ "odia essere interrotto" è 0.934 (non dovrebbe essere fuso).
 MERGE_THRESHOLD = 0.95
 
-#: 五个 slot。去掉了原来的「人物地点态度」——它存的是话题（手冲咖啡/NUS/佳琪），
-#: 本来就该在左脑，也正是「佳琪 ×52」那个大杂烩的来源。
-#: 维度不符只提醒一次，别每轮刷屏。
+#: Cinque slot. Rimossi i vecchi "persona/luogo/atteggiamento" — quello memorizzava argomenti (caffè fatto a mano/NUS/Jiaqi),
+#: che dovrebbero appartenere al cervello sinistro, ed era proprio la fonte del miscuglio "Jiaqi ×52".
+SLOTS = ("Emozione", "Modalità di coping", "Stile espressivo", "Modello mentale", "Preferenze e avversioni")
+
+
+#: Cinque slot → tre cluster UI
+
+
+#: Le dimensioni non corrispondenti vengono segnalate solo una volta, non ogni turno per evitare spam.
 _WARNED_DIM: set = set()
 
 #: Cinque slot. Rimossi i vecchi "persona/luogo/atteggiamento" — quello memorizzava argomenti (caffè fatto a mano/NUS/Jiaqi),
@@ -249,7 +255,7 @@ class TraitStore:
         q = self._vec(query)
         if q is None:
             return []
-        # 检索侧据此选门槛——阈值跟 embedder 绑，见 brain.trait_min_sim。
+        # Il lato retrieval usa questo per scegliere la soglia — la soglia è legata all'embedder, vedi brain.trait_min_sim.
         self.last_query_dim = int(q.shape[0])
         with self._conn() as c:
             rows = c.execute("SELECT * FROM rb_traits WHERE user_id=? AND embedding IS NOT NULL",
@@ -258,14 +264,14 @@ class TraitStore:
             for r in rows:
                 v = np.frombuffer(r["embedding"], dtype=np.float32)
                 if v.shape != q.shape:
-                    stale += 1           # 换过 embedder，老向量维度对不上
+                    stale += 1           # Embedder cambiato, le dimensioni dei vecchi vettori non corrispondono
                     continue
                 scored.append((float(v @ q), r))
             if stale and not _WARNED_DIM:
                 _WARNED_DIM.add(1)
-                print(f"[RBTraits] ⚠ {stale} 条判断的向量维度跟当前 embedder 不符，"
-                      "已跳过——换过 embedder 之后老向量作废，右脑检索会静默变空。"
-                      "重新 embed 一遍即可。", flush=True)
+                print(f"[RBTraits] ⚠ {stale} giudizi hanno dimensioni dei vettori non corrispondenti all'embedder corrente,\n"
+                      "sono stati saltati — dopo aver cambiato embedder i vecchi vettori sono obsoleti, il retrieval del cervello destro diventa silenziosamente vuoto.\n"
+                      "Basta re-embeddare una volta.", flush=True)
             scored.sort(key=lambda t: -t[0])
             return [(self._to_trait(c, r), s) for s, r in scored[:top_k]]
 

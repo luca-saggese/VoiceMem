@@ -1,31 +1,28 @@
-"""voicemem web demo —— 对话核心（EOU 0–300ms 投机预取）。管道在 utils.py，渲染在 index.html。
+"""voicemem web demo — core della conversazione (prefetch speculativo EOU 0–300ms). La pipeline è in utils.py, il rendering in index.html.
 
-看点：本地 ASR+VAD 边听边算，partial 一到就后台起投机 Search（本地 E5 向量 + 本地 slot
-分类，注入的 LocalQueryClassifier，0 LLM 0 网络），VAD 在 300ms 确认说完时记忆早已算好，
-交给两条 ~10 行控制流的只剩「发 LLM / 发 Realtime」。说到一半停顿又续上（barge-in）→ 取消投机。
+Punti di interesse: ASR+VAD locale elabora mentre ascolta, non appena arriva un partial avvia la Search speculativa in background (vettori E5 locali + classificazione slot locale, LocalQueryClassifier iniettato, 0 LLM 0 rete), quando VAD conferma che hai finito a 300ms le memorie sono già state calcolate, alle due ~10 righe di controllo resta solo "invia LLM / invia Realtime". Se fai una pausa e riprendi a parlare a metà frase (barge-in) → annulla il prefetch.
 
-跑（参数见 ``--help``；每个都能用同名环境变量给默认值）::
+Esegui (parametri vedi ``--help``; ognuno può avere un default tramite variabile d'ambiente con lo stesso nome)::
 
     export OPENAI_API_KEY=sk-...
-    python web/run.py                     # 默认 realtime
+    python web/run.py                     # realtime come default
     python web/run.py \\
-      --mode llm_tts \\                    # 没有 Realtime 权限时走这条
+      --mode llm_tts \\                    # usa questa se non hai permessi Realtime
       --port 8787 \\
       --spec_min_chars 6 \\
       --gamble_ms 200 \\
       --confirm_ms 300
 
-默认走 ``realtime``（OpenAI 原生语音）：一次往返直接出声，不像 llm_tts 那样要
-"LLM 出文本(~1.0s) → 攒够一句 → TTS 合成(~1.2s)" 两段串行，体验差一截。
-key 没有 Realtime 权限就用 ``--mode llm_tts``，那条路只要普通 chat + TTS，
-TTS 还能换成本地离线模型（``TTS_BACKEND=local``）。
+Il default è ``realtime`` (voce nativa OpenAI): una sola andata per produrre audio direttamente, a differenza di llm_tts che richiede "LLM produce testo(~1.0s) → accumula una frase → TTS sintetizza(~1.2s)" in due fasi seriali, l'esperienza è molto peggiore.
+Se la tua key non ha permessi Realtime usa ``--mode llm_tts``, quella strada richiede solo chat normale + TTS,
+TTS può anche essere sostituito con un modello locale offline (``TTS_BACKEND=local``).
 
-注意：记忆向量用本地 384 维 E5（投机预算内不能走网络）。换过旧 demo（OpenAI 1536 维）留了
-记忆库的，维度不兼容——先清掉记忆目录再跑。
+Nota: i vettori di memoria usano E5 locale a 384 dimensioni (non puoi usare la rete entro il budget speculativo). Se hai migrato dal vecchio demo (OpenAI a 1536 dimensioni) e hai lasciato un database di memorie, le dimensioni non sono compatibili — cancella prima la directory delle memorie prima di eseguire.
 """
 import argparse
 import asyncio
 import base64
+import faulthandler
 import json
 import os
 import re
@@ -37,23 +34,28 @@ from pathlib import Path
 
 import uvicorn
 
+# I backend audio locali (torch/CosyVoice/sherpa) possono terminare il processo
+# con un SIGSEGV nativo: abilita uno stack Python utile invece di lasciare solo
+# "segmentation fault" nel terminale.
+faulthandler.enable(all_threads=True)
+
 HERE = Path(__file__).resolve().parent
 _ROOT = HERE.parent
-sys.path.insert(0, str(HERE))                       # 让 `import utils` 找到同目录管道层
+sys.path.insert(0, str(HERE))                       # Permette a `import utils` di trovare il livello pipeline nella stessa directory
 sys.path.insert(0, str(_ROOT))
 os.environ.setdefault("VOICEMEM_MODELS_DIR", str(_ROOT / "models"))
-# 记忆空间锚在**仓库根**，不跟当前目录走。否则 `cd web && python run.py` 会在
-# web/ 底下另建一个空的 voicemem_memoryspace/demo，用户对着空库说半天话，
-# 还以为记忆没生效（实测就这么踩过）。
+# L'ancora dello spazio di memoria è nel **root del repository**, non segue la directory corrente. Altrimenti `cd web && python run.py` creerebbe
+# un voicemem_memoryspace/demo vuoto sotto web/, l'utente parlerebbe per ore contro un database vuoto,
+# e penserebbe che la memoria non funziona (è successo nella realtà).
 os.environ.setdefault("VOICEMEM_MEMORYSPACE_ROOT", str(_ROOT / "voicemem_memoryspace"))
 
 
-# ══════════════════ 命令行参数（同名环境变量给默认值，两种都行）══════════════════
-# 放在下面那两个重 import 之前：utils / voicemem 会拉起 torch + sentence-transformers，
-# 排在它们后面的话 `--help` 得先等模型库加载完。被 import 时不吃 sys.argv（传 []）。
+# ══════════════════ Parametri da riga di comando (variabili d'ambiente con lo stesso nome come default, entrambi funzionano) ═══════════════════
+# Metti prima dei due import pesanti: utils / voicemem avvieranno torch + sentence-transformers,
+# se messi dopo `--help` dovrà aspettare il caricamento della libreria modelli. Quando importato non legge sys.argv (passa []).
 
 def _parse(argv):
-    p = argparse.ArgumentParser(description="voicemem web demo（脑图 + 0–300ms 投机预取）")
+    p = argparse.ArgumentParser(description="voicemem web demo (mappa cerebrale + prefetch speculativo 0–300ms)")
     configured_base_url = os.environ.get("OPENAI_BASE_URL", "").strip().lower()
     default_mode = os.environ.get("DEMO_MODE")
     if not default_mode:
@@ -62,40 +64,40 @@ def _parse(argv):
         default_mode = "llm_tts"
     p.add_argument("--mode", choices=["llm_tts", "realtime"],
                    default=default_mode,
-                   help="回复控制流：realtime=OpenAI 原生语音（默认，体验最好）；"
-                        "llm_tts=LLM 流→TTS 流（不需要 Realtime 权限，可换本地 TTS）")
+                   help="Flusso di risposta: realtime=voce nativa OpenAI (default, migliore esperienza);\n"
+                        "llm_tts=LLM stream→TTS stream (non servono permessi Realtime, puoi usare TTS locale)")
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=int(os.environ.get("VOICEMEM_PORT", 8787)))
     p.add_argument("--spec_min_chars", type=int, default=6,
-                   help="partial 转写到几个字起投机预取")
+                   help="Numero di caratteri trascritti per avviare il prefetch speculativo")
     p.add_argument("--gamble_ms", type=int, default=200,
-                   help="静音多久就赌你说完了，补投机一次")
+                   help="Silenzio per quanti ms scommetti che hai finito, fai un prefetch extra")
     p.add_argument("--confirm_ms", type=int, default=300,
-                   help="静音多久由 VAD 确认一轮结束，交出 Turn")
+                   help="Silenzio per quanti ms VAD conferma la fine di un turno, consegna il Turn")
     p.add_argument("--config", default=os.environ.get("VOICEMEM_CONFIG"),
-                   help="一个 .json，整体覆盖下面的 CONFIG")
+                   help="Un file .json che sovrascrive completamente CONFIG qui sotto")
     p.add_argument("--space", default=os.environ.get("VOICEMEM_SPACE", "demo"),
-                   help="用哪个 memory space（voicemem_memoryspace/<space>/）")
+                   help="Quale memory space usare (voicemem_memoryspace/<space>/)")
     p.add_argument("--memory_root", default=os.environ.get("VOICEMEM_MEMORY_ROOT", ""),
-                   help="直接指定记忆库目录，给了就盖过 --space")
+                   help="Specifica direttamente la directory del database di memoria, se fornita sovrascrive --space")
     p.add_argument("--lang", choices=["it", "en"],
                    default=os.environ.get("VOICEMEM_MEMORY_LANGUAGE", "it"),
                    help="Lingua della nuova Memory Space: it (default) / en. "
                         "Gli spazi esistenti usano la lingua salvata alla creazione.")
     p.add_argument("--log-file", default=os.environ.get("VOICEMEM_LOG_FILE", ""),
-                   help="日志文件路径；不传则自动写到 results/logs/")
+                   help="Percorso del file di log; se non fornito viene scritto automaticamente in results/logs/")
     p.add_argument("--no-file-log", action="store_true",
                    default=os.environ.get("VOICEMEM_FILE_LOG", "1") == "0",
-                   help="只输出到终端，不保存日志文件")
+                   help="Stampa solo sul terminale, non salva il file di log")
     return p.parse_args(argv)
 
 
 ARGS = _parse(None if __name__ == "__main__" else [])
 
-# 必须放在重依赖 import 之前：模型加载、依赖库 warning、Uvicorn 日志和后面所有
-# print 才能从进程启动第一刻起完整落盘。被别的模块 import 时不擅自创建日志文件。
+# Deve essere prima degli import pesanti: caricamento modelli, warning dipendenze, log Uvicorn e tutti i
+# print successivi devono essere registrati dall'inizio del processo. Quando importato da altri moduli non crea file di log.
 # Lingua: il core usa italiano come default; --lang seleziona it o en prima di creare VoiceMem.
-# 因为抽取 prompt 是按它选中英两套示例的。
+# L'estrazione del prompt segue gli esempi selezionati tra cinese e inglese.
 from voicemem.lang import set_memory_language as _set_lang   # noqa: E402
 _set_lang(ARGS.lang)
 
@@ -104,53 +106,56 @@ if __name__ == "__main__" and not ARGS.no_file_log:
     from logging_utils import setup_file_logging
     LOG_FILE = setup_file_logging(_ROOT, ARGS.log_file)
 
-import utils                                         # noqa: E402  同目录管道层
+import utils                                         # noqa: E402  Livello pipeline nella stessa directory
 from audio_timeline import AudioTimeline, SpeechRateEstimator  # noqa: E402
 from session_context import SessionBuffer            # noqa: E402
 from voicemem import VoiceMem                        # noqa: E402
 from voicemem.audio_timing import TimedAudioChunk    # noqa: E402
 
 BARGE_DEBUG = os.environ.get("BARGE_DEBUG", "1") != "0"
-BARGE_THRESHOLD = float(os.environ.get("BARGE_THRESHOLD", "0.45"))  # 越小越容易被打断
-#: 转写要比上次多出这么多个字，才算"他真的插话了"。
-#: 之前这里是「连续人声 ≥280ms」，纯 VAD 判定太松——咳嗽、关门、AEC 没压干净的
-#: 助手回声都算人声，日志里一串"连续人声 → 请求打断 / 助手没在说，忽略"在空转。
-#: 换成等 ASR 真的吐出字，代价是多等一次出字（~200-300ms），换来不会自己掐自己。
+BARGE_THRESHOLD = float(os.environ.get("BARGE_THRESHOLD", "0.45"))  # Più basso è, più facile essere interrotto
+#: La trascrizione deve avere questi caratteri in più rispetto all'ultima volta, per contare come "ha davvero interrotto".
+#: Prima era "voce continua ≥280ms", il VAD puro era troppo permissivo — tosse, porte che si chiudono, AEC non completamente soppresso
+#: tutti contavano come voce, nei log una serie di "voce continua → richiedi interruzione / l'assistant non sta parlando, ignora" girava a vuoto.
+#: Passando ad aspettare che l'ASR produca davvero dei caratteri, il costo è attendere un'altra uscita (~200-300ms), ma eviti di interromperti da solo.
 #:
-#: 这个数字直接决定"插话多久才被听见"：说满 N 个字要时间，实测 3 个字要 ~2 秒。
-#: 曾经因为 2 个字会被回声骗到（漏出过 "an" —— 助手说的 Annie 回到麦克风里）
-#: 才提到 3。现在回声改由 _is_echo() 按**助手正在说的原文**挡，不再靠字数硬扛，
-#: 所以降回 2：插话少说一个字，大约快 300-500ms。
+#: Questo numero determina direttamente "quanto tempo ci vuole prima che un'interruzione sia sentita": dire N caratteri richiede tempo, nei test 3 caratteri richiedono ~2 secondi.
+#: Una volta con 2 caratteri venivamo ingannati dall'eco (è trapelato "an" — Annie detto dall'assistant tornato nel microfono)
+#: quindi salimmo a 3. Ora l'eco è gestito da _is_echo() basandosi sul **testo originale che l'assistant sta dicendo**, non affidandoci più al conteggio rigido,
+#: quindi torniamo a 2: un carattere meno nell'interruzione, circa 300-500ms più veloce.
+#: Una volta con 2 caratteri venivamo ingannati dall'eco (è trapelato "an" — Annie detto dall'assistant tornato nel microfono)
+#: quindi salimmo a 3. Ora l'eco è gestito da _is_echo() basandosi sul **testo originale che l'assistant sta dicendo**, non affidandoci più al conteggio rigido,
+#: quindi torniamo a 2: un carattere meno nell'interruzione, circa 300-500ms più veloce.
 BARGE_MIN_CHARS = int(os.environ.get("BARGE_MIN_CHARS", "2"))
 BARGE_STABLE_UPDATES = int(os.environ.get("BARGE_STABLE_UPDATES", "2"))
 BARGE_REJECT_SILENCE_MS = int(os.environ.get("BARGE_REJECT_SILENCE_MS", "220"))
 BARGE_CANDIDATE_TIMEOUT_MS = int(os.environ.get("BARGE_CANDIDATE_TIMEOUT_MS", "1200"))
-#: 助手刚开口那一小段不允许被打断——那时候麦克风里几乎只有它自己的声音。
+#: Non è consentito interrompere durante il breve periodo iniziale quando l'assistant ha appena iniziato a parlare — in quel momento nel microfono c'è quasi solo la sua stessa voce.
 BARGE_GRACE_MS = int(os.environ.get("BARGE_GRACE_MS", "500"))
-#: OpenAI 那侧用哪种回合/打断判定。semantic_vad 由模型判"这是不是真的在打断"，
-#: 对 backchannel（"嗯""对""哦"）不敏感；server_vad 只看有没有声音，所以助手自己
-#: 的回声、环境噪声都能把它掐了。模型或 SDK 不支持时会以 error 事件回来（不抛），
-#: 日志里看到就改回 TURN_DETECTION=server_vad。
+#: Quale metodo di rilevamento turno/interruzione usare dal lato OpenAI. semantic_vad viene giudicato dal modello se "è davvero un'interruzione",
+#: non sensibile ai backchannel ("mhm", "sì", "oh"); server_vad guarda solo se c'è suono, quindi l'eco dell'assistant stesso
+#: o il rumore ambientale possono interromperlo. Se il modello o SDK non lo supporta tornerà come evento error (non lancerà),
+#: vedi nei log e torna a TURN_DETECTION=server_vad.
 TURN_DETECTION = os.environ.get("TURN_DETECTION", "semantic_vad")
-#: semantic_vad 的抢答倾向：low 更愿意等你说完，high 更爱抢。
+#: Tendenza di risposta rapida di semantic_vad: low è più disposto ad aspettare che tu finisca, high preferisce interrompere.
 VAD_EAGERNESS = os.environ.get("VAD_EAGERNESS", "low")
-MIC_RATE = 24000                       # 前端上行的采样率（index.html 的 SAMPLE_RATE）
-#: 按声纹拦陌生人。默认开——启动时预热过、又在后台线程算，实测对延迟零影响
-#: （memory_hits 仍在 EOU 前 0.63s 到达，跟关掉时一样）。
-SPEAKER_GATE = os.environ.get("VOICEMEM_SPEAKER_GATE", "1") != "0"   # 打断为什么没触发：看这几行日志
-#: 连续几轮认成别人才判"陌生人"。1 = 一轮就翻脸（demo 里演"换个人说话"要的就是
-#: 这个）；声纹库脏、老是把主人认成新人时，调到 2 能挡掉大部分误判。
+MIC_RATE = 24000                       # Tasso di campionamento upstream del frontend (SAMPLE_RATE di index.html)
+#: Blocca gli sconosciuti basandosi sul voiceprint. Default attivo — riscaldato all'avvio e calcolato in thread di background, nei test zero impatto sulla latenza
+#: (memory_hits arrivano ancora a 0.63s prima di EOU, uguale a quando è disattivato).
+SPEAKER_GATE = os.environ.get("VOICEMEM_SPEAKER_GATE", "1") != "0"   # Perché l'interruzione non si è attivata: guarda queste righe di log
+#: Riconosciuto come qualcun altro per turni consecutivi prima di essere dichiarato "sconosciuto". 1 = cambia faccia dopo un turno (nel demo vuoi questo comportamento per "cambia persona che parla");
+#: quando il database voiceprint è sporco e confonde spesso il proprietario con un nuovo utente, impostare a 2 può bloccare la maggior parte dei falsi positivi.
 STRANGER_MIN_TURNS = int(os.environ.get("STRANGER_MIN_TURNS", "1"))
-#: 每轮都打一行说话人判定（默认只在判成陌生人时打）。
+#: Stampa una riga di giudizio dello speaker ogni turno (default stampa solo quando viene dichiarato sconosciuto).
 SPEAKER_DEBUG = os.environ.get("SPEAKER_DEBUG", "0") != "0"
 MODE = ARGS.mode                                     # llm_tts | realtime
-SPEC_MIN_CHARS = ARGS.spec_min_chars                 # partial 起投机
-GAMBLE_S  = ARGS.gamble_ms / 1000                    # 赌说完
-CONFIRM_S = ARGS.confirm_ms / 1000                   # VAD 确认结束
+SPEC_MIN_CHARS = ARGS.spec_min_chars                 # Avvia prefetch speculativo per partial
+GAMBLE_S  = ARGS.gamble_ms / 1000                    # Scommetti che hai finito
+CONFIRM_S = ARGS.confirm_ms / 1000                   # VAD conferma fine turno
 
 _RT_PERSONA = (
-    # 开宗明义地把"你凭什么存在"讲清楚。模型默认的助理人格非常强势，不明确
-    # 给它一个不同的立身之本，它就会退回"您好，有什么可以帮您"。
+    # Chiarisci apertamente "perché esisti". La personalità predefinita dell'assistant è molto dominante, senza specificare
+    # una diversa ragione di esistere, tornerà a "Ciao, come posso aiutarti?".
     "你是这个用户长期在用的语音助手，你们认识很久了。你的价值在于**你记得他**——"
     "你说的每句话，都应该是一个没有记忆的助手说不出来的。\n"
     "\n"
@@ -986,7 +991,10 @@ CONFIG = {
                                                       "system": _RT_PERSONA}},
         "tts":      {"provider": "cosyvoice3", "config": {
             "model": os.environ.get("VOICEMEM_COSYVOICE_MODEL", "models/tts/Fun-CosyVoice3-0.5B-2512"),
-            "ref_audio": os.environ.get("VOICEMEM_COSYVOICE_REF_AUDIO", ""),
+            "ref_audio": os.environ.get(
+                "VOICEMEM_COSYVOICE_REF_AUDIO",
+                str(_ROOT / "assets" / "italian.wav"),
+            ),
             "default_language": ARGS.lang,
         }},
         "realtime": {"provider": "openai", "config": {"model": utils.RT_MODEL}},

@@ -48,12 +48,11 @@ def openai_reply(model: str | None = None, api_key: str | None = None,
                  base_url: str | None = None, system: str | None = None) -> Callable:
     """Provider di risposta integrato: API compatibile con OpenAI, output streaming. Restituisce una funzione async generator.
 
-
-
-    模型走 ``reply`` 角色：``model`` 参数 → ``VOICEMEM_REPLY_MODEL`` → 跟随 ``chat``。
-    回复是用户直接听得见的一路，所以单独留了一个角色让它能和后台整理记忆的模型
-    分开配；不配就跟着 chat 走，不会出现"设了模型但回复还在用默认值"这种一半生效。
-    ``import voicemem`` 不会因此要求有 key（client 首次调用时才建）。
+    Il modello segue il ruolo ``reply``: il parametro ``model`` → ``VOICEMEM_REPLY_MODEL`` → segue ``chat``.
+    La risposta è il canale che l'utente sente direttamente, quindi ho lasciato un ruolo separato per permettere di configurarlo
+    indipendentemente dal modello che organizza la memoria in background; se non configurato segue ``chat``, evitando il problema
+    "hai impostato un modello ma la risposta usa ancora il default" dove metà funziona.
+    ``import voicemem`` non richiede una key (il client viene creato solo alla prima chiamata)."
 
     """
     client = None

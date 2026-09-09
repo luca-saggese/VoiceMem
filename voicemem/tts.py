@@ -17,8 +17,8 @@ Il percorso core non lo tocca — il sistema memoria arriva solo al testo, l'aud
 ``_NEED`` (non viene avviato da warmup), chi vuole audio fa ``vm.utils.get("tts")``;
  gli utenti senza piper / voxcpm installati non sono influenzati.
 
-I backend che supportano informazioni di allineamento possono produrre ``TimedAudioChunk``; gli timestamp usano campioni relativi all'inizio del segmento
-位置。原有的纯 ``bytes`` 后端不需要修改。
+I backend che supportano informazioni di allineamento possono produrre ``TimedAudioChunk``; gli timestamp usano campioni relativi all'inizio del segmento.
+I backend puri ``bytes`` esistenti non richiedono modifiche.
 
 
 ``speak_stream()`` è "sintetizza mentre genera": quando viene completata una frase viene inviata alla sintesi, non si aspetta che tutto il testo sia generato —
@@ -36,38 +36,38 @@ from voicemem.audio_timing import TimedAudioChunk, TextTimestamp
 from voicemem.llm_config import resolve_model
 
 
-#: 兼容旧名字。真正的解析在 OpenAITTS.__init__ 里现算（见 llm_config）——
-#: 原来这里是 import 时读 env，先 import 后设 env 就静默不生效。
+#: Compatibile con vecchi nomi. La vera analisi avviene in OpenAITTS.__init__ (vedi llm_config) —
+#: prima si leggeva env all'import, se impostavi env dopo l'import rimaneva silenziosamente inefficace.
 TTS_MODEL = resolve_model(role="tts")
 TTS_BACKEND = os.environ.get("TTS_BACKEND", "cosyvoice3")   # cosyvoice3 | openai | local | voxcpm
-#: 音色。原来这个值写死在合成函数里，走 llm_tts 的用户想换只能改源码——
-#: 内置默认实现也该是可配的，不然「可替换」只剩换掉整个后端一条路。
+#: Timbro vocale. Prima questo valore era scritto hardcoded nella funzione di sintesi, gli utenti di llm_tts volevano cambiarlo ma dovevano modificare il codice sorgente —
+#: anche le implementazioni default integrate dovrebbero essere configurabili, altrimenti "intercambiabile" significa solo sostituire l'intero backend.
 TTS_VOICE = os.environ.get("OPENAI_TTS_VOICE", "alloy")
-#: 怎么念（语速、轻重、停顿）。gpt-4o-mini-tts 支持 instructions，是控制语气的地方。
-#: 留空就不传这个参数——老模型（tts-1）不认它，传了会报错。
+#: Come leggere (velocità, enfasi, pause). gpt-4o-mini-tts supporta instructions, è dove controllare il tono.
+#: Se vuoto non passa questo parametro — i modelli vecchi (tts-1) non lo riconoscono, passandolo causerebbe un errore.
 TTS_INSTRUCTIONS = os.environ.get("OPENAI_TTS_INSTRUCTIONS", "")
-#: 只在「生成候选音色」时有意义（同 seed + 同文本 = 同一个人，方便挑）。
-#: **它不保证跨句音色一致**，真正锁音色的是 ref_audio，见 BreezeTTS 文档。
+#: Ha senso solo durante "generazione timbri candidati" (stesso seed + stesso testo = stessa persona, utile per scegliere).
+#: **Non garantisce coerenza del timbro tra frasi**, a bloccare il timbro è ref_audio, vedi documentazione BreezeTTS.
 BREEZE_SEED = int(os.environ.get("VOICEMEM_BREEZE_SEED", "42"))
 SAMPLE_RATE = 24000
 
-# 怎么切给 TTS 的段，决定了多久能出第一声。实测 gpt-4o-mini-tts 的首帧延迟随文本
-# 长度涨：8字 615ms / 25字 902ms / 100字 1318ms——所以**第一段要尽量短**（早出声），
-# 后面的段可以长（少调几次、语气连贯）。
-_SENT_END  = "。！？!?…\n"          # 句末：正常的切段点
-_SOFT_END  = "，,、；;：: "          # 句中停顿：只有第一段用，为了抢出第一声
+# Come tagliare i segmenti per il TTS determina quanto tempo ci vuole per la prima voce. Nei test la latenza della prima frame di gpt-4o-mini-tts cresce con la lunghezza del testo:
+# 8 caratteri 615ms / 25 caratteri 902ms / 100 caratteri 1318ms — quindi **il primo segmento deve essere il più corto possibile** (prima voce in uscita),
+# i segmenti successivi possono essere più lunghi (meno chiamate, tono coerente).
+_SENT_END  = "。！？!?…\n"          # Fine frase: punto normale di taglio
+_SOFT_END  = "，,、；;：: "          # Pausa interna: usato solo per il primo segmento, per far uscire la prima voce prima
 #
-# 下面几个数原来是写死的，照 gpt-4o-mini-tts 的首帧延迟标定的。换后端就得重标：
-# 每段都是**独立合成**的，语调轮廓不跨段延续，所以段越多、接缝越明显——听感上
-# 是"一句一句拼起来的"而不是连着说下来的。切得碎是拿流畅度换首帧延迟，
-# 哪头更值取决于后端有多快。
+# I numeri qui sotto erano originariamente hardcoded, calibrati sulla latenza della prima frame di gpt-4o-mini-tts. Cambiando backend devi ricalibrare:
+# ogni segmento è **sintetizzato indipendentemente**, il contorno tonale non si estende tra segmenti, quindi più segmenti ci sono, più evidenti sono le giunture —
+# all'ascolto sembra "frase per frase incollata" invece che parlato continuo. Tagliare finemente è scambiare fluidità per latenza della prima frame,
+# quale testa vale di più dipende da quanto è veloce il backend.
 _FIRST_MIN = int(os.environ.get("VOICEMEM_TTS_FIRST_MIN", "6"))
 _FIRST_MAX = int(os.environ.get("VOICEMEM_TTS_FIRST_MAX", "20"))
 _SENT_MIN  = int(os.environ.get("VOICEMEM_TTS_SENT_MIN", "12"))
 _SENT_MAX  = int(os.environ.get("VOICEMEM_TTS_SENT_MAX", "60"))
-#: 第一段允不允许在逗号处断开。默认允许——抢第一声用的。但这会**把一句话劈成两次
-#: 独立合成**，接缝正好落在句子中间，是最难听的一种。后端首帧够快时设 0，
-#: 让所有段都落在句末，句内不断。
+#: Se il primo segmento può essere spezzato alla virgola. Default sì — serve per far uscire la prima voce prima. Ma questo **divide una frase in due sintesi indipendenti**,
+#: la giunzione cade esattamente nel mezzo della frase, che è il tipo più sgradevole da ascoltare. Quando il backend ha latenza della prima frame sufficientemente bassa, imposta 0,
+#: così tutti i segmenti cadono alla fine delle frasi, senza divisioni interne.
 _FIRST_SOFT = os.environ.get("VOICEMEM_TTS_FIRST_SOFT", "1") != "0"
 
 
@@ -79,33 +79,33 @@ def cut_point(buf: str, first: bool) -> bool:
         return False
 
 
-    if first:                                  # 抢第一声：逗号也算，实在没有就按长度切
+    if first:                                  # Prima voce: anche la virgola conta, se proprio non ci sono altre opzioni taglia per lunghezza
         ends = _SENT_END + _SOFT_END if _FIRST_SOFT else _SENT_END
         return (len(s) >= _FIRST_MIN and s[-1] in ends) or len(s) >= _FIRST_MAX
     return (len(s) >= _SENT_MIN and s[-1] in _SENT_END) or len(s) >= _SENT_MAX
 
 
-# ── 内置后端 ──────────────────────────────────────────────────────────────────
+# ── Backend integrati ──────────────────────────────────────────────────────────
 
 class BaseTTS:
-    """内置后端的公共壳：子类只写 ``_raw()``，样本对齐这里统一做。
+    """Guscio comune dei backend integrati: le sottoclassi scrivono solo ``_raw()``, l'allineamento dei campioni viene fatto qui uniformemente.
 
-    **按样本边界切块**：http 流是按网络包切的，实测 69 块里 62 块是奇数字节，而
-    PCM16 一个样本占 2 字节——消费方 ``Int16Array``/``np.frombuffer`` 撞上奇数长度
-    直接报错，那一整块音频就没了。这里把跨块的半个样本留到下一块，保证吐出去的
-    每块都是完整样本。自己写后端不继承它也行，只要 ``stream()`` 吐的是整样本。
+    **Taglia ai confini dei campioni**: lo stream http è tagliato per pacchetti di rete, nei test su 69 blocchi 62 hanno byte dispari,
+    mentre un campione PCM16 occupa 2 byte — il consumatore ``Int16Array``/``np.frombuffer" va in errore con lunghezza dispari
+    e quel blocco audio intero viene perso. Qui si lascia mezzo campione che attraversa i blocchi al blocco successivo, garantendo che ogni blocco prodotto
+    contenga campioni completi. Puoi scrivere il tuo backend senza ereditarlo, basta che ``stream()`` produca interi campioni.
     """
 
     async def stream(self, text: str, instruction: str | None = None):
-        """``instruction``：**这一轮**怎么念。感知层每轮判出的情绪要能进到声音里，
-        而情绪是逐轮变的，写在实例上就成了全局常量。给 None 就用实例上的默认。
-        后端不支持的（piper / voxcpm）忽略它即可。"""
+        """``instruction``: **come leggere questa round**. Lo strato di percezione giudica l'emozione ogni turno e deve entrare nel suono,
+        mentre l'emozione cambia turno per turno, scriverla sull'istanza la renderebbe una costante globale. Passa None per usare il default dell'istanza.
+        I backend che non lo supportano (piper / voxcpm) possono ignorarlo."""
         tail = b""
         async for chunk in self._raw(text, instruction):
             timed = chunk if isinstance(chunk, TimedAudioChunk) else None
             raw = timed.pcm if timed is not None else chunk
             buf = tail + raw
-            cut = len(buf) & ~1                     # 向下取到偶数
+            cut = len(buf) & ~1                     # Arrotonda per difetto al pari
             tail = buf[cut:]
             if cut:
                 if timed is None:
@@ -115,18 +115,18 @@ class BaseTTS:
                         pcm=buf[:cut], timestamps=timed.timestamps,
                         sample_rate=timed.sample_rate)
         if tail:
-            yield tail + b"\x00"                    # 收尾那半个样本补齐
+            yield tail + b"\x00"                    # Completa l'ultimo mezzo campione
 
     def _raw(self, text: str, instruction: str | None = None):
         raise NotImplementedError
 
 
 class OpenAITTS(BaseTTS):
-    """在线 api：OpenAI TTS（默认 gpt-4o-mini-tts），response_format=pcm 就是 24k PCM16。
+    """API online: OpenAI TTS (default gpt-4o-mini-tts), response_format=pcm è 24k PCM16.
 
-    ``base_url`` 默认**不跟着** ``VoiceMem(base_url=...)`` 走：那个通常指向自建的
-    LLM / embedding 服务，多半没有 ``/audio/speech``，跟过去只会在出声时才报错。
-    要换端点在这里显式给（或 ``OPENAI_TTS_BASE_URL``）。
+    ``base_url`` di default **non segue** ``VoiceMem(base_url=...)``: quello di solito punta a un servizio
+    LLM/embedding self-hosted, che probabilmente non ha ``/audio/speech``, passandolo causerebbe un errore solo quando si tenta l'audio.
+    Per cambiare endpoint specificalo qui esplicitamente (o ``OPENAI_TTS_BASE_URL``).
     """
 
     def __init__(self, model=None, voice=None, instructions=None,
@@ -139,7 +139,7 @@ class OpenAITTS(BaseTTS):
         self._client = None
 
     def _cli(self):
-        """client 首次用到时才建，``import voicemem.tts`` 不会因此要求有 key。"""
+        """Il client viene creato solo al primo utilizzo, ``import voicemem.tts`` non richiede quindi una key."""
         if self._client is None:
             from openai import AsyncOpenAI
             kw = {}
@@ -162,10 +162,10 @@ class OpenAITTS(BaseTTS):
 
 
 class PiperTTS(BaseTTS):
-    """离线小模型：piper（纯离线 onnx，中英皆可）。装：pip install piper-tts。
+    """Modello piccolo offline: piper (onnx puro offline, cinese e inglese). Installa: pip install piper-tts.
 
-    ``model`` 指向 voice 的 .onnx（缺省读 ``VOICEMEM_TTS_MODEL``）。想换 kokoro /
-    edge-tts 等，照着这个类写一个就行——外面只认 ``stream()``。
+    ``model`` punta al .onnx della voce (default legge ``VOICEMEM_TTS_MODEL``). Per cambiare con kokoro /
+    edge-tts ecc., scrivi una classe seguendo questo modello — fuori riconosce solo ``stream()``.
     """
 
     def __init__(self, model=None):
@@ -176,18 +176,18 @@ class PiperTTS(BaseTTS):
         if self._voice is None:
             if not self.model:
                 raise ValueError(
-                    "piper 后端要指定 voice 文件：设 VOICEMEM_TTS_MODEL 指向 .onnx，"
-                    '或 config 里给 {"provider": "piper", "config": {"model": "…/x.onnx"}}')
+                    "Il backend piper richiede un file voice: imposta VOICEMEM_TTS_MODEL per puntare al .onnx,\n"
+                    'oppure nel config dai {"provider": "piper", "config": {"model": "…/x.onnx"}}')
             from piper import PiperVoice
-            self._voice = PiperVoice.load(self.model)   # piper api 随版本，对照其文档
+            self._voice = PiperVoice.load(self.model)   # L'api di piper cambia con le versioni, vedi la sua documentazione
         return self._voice
 
     async def _raw(self, text, instruction=None):
-        v = self._load()                      # piper 没有语气入口，instruction 忽略
+        v = self._load()                      # piper non ha un ingresso per il tono, instruction viene ignorato
         sr = getattr(getattr(v, "config", None), "sample_rate", 22050)
-        for raw in v.synthesize_stream_raw(text):       # 同步生成器，int16 bytes @ sr
+        for raw in v.synthesize_stream_raw(text):       # Generatore sincrono, bytes int16 @ sr
             f = np.frombuffer(raw, np.int16).astype(np.float32) / 32768.0
-            out = resample(f, src=sr, dst=SAMPLE_RATE)  # 统一到 24k
+            out = resample(f, src=sr, dst=SAMPLE_RATE)  # Uniforma a 24k
             yield (np.clip(out, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
 
 

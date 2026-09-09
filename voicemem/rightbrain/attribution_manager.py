@@ -30,7 +30,7 @@ class AttributionManager:
         self._rb_store = rb_store
         self._llm = llm_fn
 
-    # ── 短期归因：entity.description ────────────────────────────────────────
+    # ── Attribuzione a breve termine: entity.description ────────────────────────
 
     def run_short_term(self, user_id: str, entity_ids: list[str]) -> None:
         for eid in entity_ids:

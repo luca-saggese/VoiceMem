@@ -21,8 +21,8 @@ from __future__ import annotations
 import re
 from datetime import date, timedelta
 
-#: 相对时间词 → (起始偏移, 天数)。偏移是相对"今天"的天数。
-#: 周相关的偏移在 _resolve 里按当天星期几现算，这里用 None 占位。
+#: Parole temporali relative → (offset iniziale, numero di giorni). L'offset è il numero di giorni relativo a "oggi".
+#: Gli offset legati alla settimana vengono calcolati dinamicamente in _resolve basandosi sul giorno della settimana corrente, qui usiamo None come segnaposto.
 _SPANS: dict[str, tuple[int | None, int]] = {
     "前天":     (-2, 1),
     "昨天":     (-1, 1),

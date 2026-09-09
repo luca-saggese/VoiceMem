@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 
-#: 环境变量名。也可以 VoiceMem(memory_language="it")、demo 的 --lang。
+#: Nome della variabile d'ambiente. Puoi anche usare VoiceMem(memory_language="it") o --lang del demo.
 ENV = "VOICEMEM_MEMORY_LANGUAGE"
 SUPPORTED = ("it", "en")
 DEFAULT = "it"
@@ -21,7 +21,7 @@ _override: str | None = None
 def _check(value: str) -> str:
     v = (value or "").strip().lower()
     if v not in SUPPORTED:
-        raise ValueError(f"memory_language 只能是 {' / '.join(SUPPORTED)}，收到 {value!r}")
+        raise ValueError(f"memory_language può essere solo {' / '.join(SUPPORTED)}, ricevuto {value!r}")
     return v
 
 
@@ -31,7 +31,7 @@ def _set(lang: str) -> None:
 
 
 def set_memory_language(value: str | None) -> None:
-    """进程级设置。None / "" 表示清掉覆盖，回到 env / 默认。"""
+    """Impostazione a livello di processo. None / '' significa cancellare l'override, tornare a env / default."""
     global _override
     _override = _check(value) if (value or "").strip() else None
 
@@ -53,20 +53,21 @@ def is_zh() -> bool:
 
 
 def resolve_for_space(memory_root, explicit: str | None = None) -> str:
-    """把这个实例的语言定下来，并落到它对应的**空间**上。
+    """Fissa la lingua di questa istanza e scrivila nel suo **spazio** corrispondente.
 
-    ``VoiceMem(memory_language=...)`` 以前只写进程级 override，于是：先建一个
-    it 实例、再建一个不传参数的实例，后者会继承 it——文档写的默认 en 变成了
-    取决于构造顺序（issue #9）。根子是同一个概念存了两个地方：demo 那边从空间
-    json 读，库这边只改全局。
+    ``VoiceMem(memory_language=...)`` prima scriveva solo un override a livello di processo, quindi:
+    prima crei un'istanza it, poi crei un'istanza senza parametri, quest'ultima eredita it —
+    il default en scritto nella documentazione diventa dipende dall'ordine di costruzione (issue #9).
+    La radice è lo stesso concetto存ato in due posti: dal lato demo legge dallo spazio json,
+    dalla parte libreria cambia solo il globale.
 
-    这里统一到空间上：
+    Qui unifichiamo a livello di spazio:
 
-        显式给了 → 写进这个空间的 json，并生效
-        没给     → 读这个空间自己的记录；空间没记录再回落 env / 默认，
-                   并把结果写回去（建的时候定一次，之后不再变）
+        Esplicito → scrivi nel json di questo spazio, e diventa effettivo
+        Non dato → leggi la registrazione di questo spazio; se lo spazio non ha registrazione, fai fallback a env / default,
+                   e scrivi il risultato (definito una volta alla creazione, poi non cambia)
 
-    两个实例各读各的空间，构造顺序不再影响任何东西。
+    Due istanze leggono ciascuno il proprio spazio, l'ordine di costruzione non influenza più nulla.
     """
     import json as _json
     from voicemem.utils.common import space as _space

@@ -1,22 +1,21 @@
-"""右脑组件 RightBrain。
+"""Componente cervello destro RightBrain.
 
-从 VoiceMem 上帝类里抽出来的**右脑那一整块**——heartnote 情感记忆写入、
-内心 OS 生成、右脑图层（情绪/关系/性格特质）写入、右脑检索（情境指导 rb_directive
-的结构化 top-N），以及围绕它们的 LLM 清洁（重复删除 / 矛盾 supersede）。
+Estratto dall'oggetto "dio" VoiceMem — **l'intero lato destro del cervello**: scrittura memoria emotiva heartnote,
+generazione内心 OS, scrittura layer cervello destro (emozione/relazioni/tratti di personalità), retrieval cervello destro (top-N strutturato guidato da rb_directive contestuale), e pulizia LLM attorno ad essi (eliminazione duplicati / supersede contraddizioni).
 
-参考 mem0 的组合模式：
-  * **组件自持零件**——3 个右脑侧懒加载单例（rb_repo / rb_graph_store /
-    attribution_manager）连同它们与宿主共享的缓存和锁，都在这个组件内部，
-    engine 不再持有各自的 _get_*。
-  * **依赖显式注入**——凡是需要用到"文本 embedding / LLM(JSON) / LLM(text) /
-    会话追踪器 / 左脑仓库 / 内心OS 生成 / 特质抽取"这些**非右脑本域**能力的地方，
-    一律在 __init__ 里以 getter/函数引用注入（懒加载语义保持不变），组件内部
-    通过 self._dep() 调用。
+Modello compositivo ispirato a mem0:
+  * **Componenti autocontenuti** — 3 singleton lazy-loading sul lato destro del cervello (rb_repo / rb_graph_store /
+    attribution_manager) insieme alle loro cache e lock condivisi con l'host, tutto interno a questo componente,
+    l'engine non mantiene più i propri _get_*.
+  * **Iniezione esplicita delle dipendenze** — Ovunque servano capacità **non-native-del-cervello-destro** come "embedding testo / LLM(JSON) / LLM(testo) /
+    tracciatore sessioni / repository cervello sinistro / generazione内心OS / estrazione tratti",
+    vengono iniettati in __init__ come getter/riferimenti funzione (il semantic lazy-loading rimane invariato), il componente li chiama internamente
+    tramite self._dep().
 
-logic 一字不改：方法体原样搬运，只改"怎么拿依赖"。
+La logica è identica: i corretti dei metodi sono stati spostati così com'erano, si è cambiato solo "come ottenere le dipendenze".
 
-brain.py 不 import engine（避免循环）——RightBrainHit 数据类与模块级 _rb_*
-辅助函数都落在本模块，engine 反向从这里 import。
+brain.py non importa engine (evita cicli) — la classe data RightBrainHit e le funzioni ausiliarie a livello di modulo _rb_*
+risiedono in questo modulo, engine importa da qui.
 """
 
 from __future__ import annotations
