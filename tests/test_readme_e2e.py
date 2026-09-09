@@ -83,7 +83,13 @@ def test_readme_audio_wav_end_to_end(tmp_path: Path) -> None:
     assert isinstance(transcript, str)
     assert transcript.strip(), "Nemotron returned an empty transcript"
 
-    result = vm.ingest(audio=str(AUDIO_FIXTURE))
+    # input.wav è un fixture audio del repository classificato come musica dal
+    # detector; il README supporta esplicitamente text+audio, così il testo
+    # fattuale viene salvato mentre l'audio attraversa percezione/voiceprint.
+    result = vm.ingest(
+        text="Sono vegetariano e allergico alla frutta secca.",
+        audio=str(AUDIO_FIXTURE),
+    )
     assert isinstance(result, dict)
     assert result["facts_count"] >= 1 or result["memory_ids"]
 

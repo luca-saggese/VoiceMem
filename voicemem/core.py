@@ -134,8 +134,8 @@ class VoiceMem:
         """Salva una frase. ``ingest("testo")`` salva testo; ``ingest(audio="x.wav")`` quando passi solo audio
         prima trascrivi localmente poi salva (lo stesso audio passa comunque attraverso voiceprint/scena/percezione emotiva). Se passi entrambi usa il testo fornito."""
         if audio is not None:
+            from voicemem import sample_audio
             audio = sample_audio(audio)   # Import locale: __init__ importa core, importare a livello globale causerebbe ciclo
-            audio = sample_audio(audio)
         if text is None:
             if audio is None:
                 raise ValueError("ingest() deve ricevere o text o audio")
