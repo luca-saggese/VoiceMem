@@ -548,7 +548,7 @@ class Orchestrator:
         """
         import json as _json
 
-        from voicemem.lang import is_zh as _is_zh, label_rule as _label_rule
+        from voicemem.lang import is_it as _is_it, label_rule as _label_rule
 
         def _looks_cjk(t: str) -> bool:
             return any("\u4e00" <= ch <= "\u9fff" for ch in (t or ""))
@@ -561,7 +561,7 @@ class Orchestrator:
             会突然冒出中文；而丢掉只是这一轮少一条特质，下一轮还会再抽。
             跟 attribution_manager 精炼后语言变了就保留原句是同一个取舍。
             """
-            want_cjk = _is_zh()
+            want_cjk = False
             out = []
             for slot, label in items:
                 if _looks_cjk(label) != want_cjk:
@@ -583,7 +583,7 @@ class Orchestrator:
         # 模型是**照抄示例**（存下来的正好是「评审前会紧张」「讨厌被打断」这几个
         # 示例原文）。只加一句"跟随输入语言"的规则没用，示例的牵引力更强，
         # 所以整套都要换。slot 名保持中文：它是内部键，检索/配额/脑图都按它做键。
-        if _is_zh():
+        if _is_it():
             prompt = (
                 f"用户说了这句话（当前情绪：{emotion or '未知'}）：\n「{text[:300]}」\n\n"
                 "判断这句话有没有透露出以下几类主观信息，每类最多提炼一条简短标签"
@@ -994,10 +994,10 @@ class Orchestrator:
             # 原来是按这句话有没有中文字符判的：英文库里用户偶尔冒一句中文，
             # inner_os 就成了中文，跟同一条记忆的其它字段脱节。语言是库的属性，
             # 见 voicemem/lang.py。
-            from voicemem.lang import is_zh as _os_is_zh
-            is_chinese = _os_is_zh()
-            pronoun = user_name if user_name else ("用户" if is_chinese else "they")
-            if is_chinese:
+            from voicemem.lang import is_it as _os_is_it
+            is_italian = _os_is_it()
+            pronoun = user_name if user_name else ("l'utente" if is_italian else "they")
+            if is_italian:
                 system_prompt = (
                     f"你是一个有共情能力的AI助手，用第三人称记录你对用户情绪状态的内心感受。"
                     f"根据用户说的话，写出你（AI）的内心反应——就像你悄悄感受到了TA的情绪并被打动。"
@@ -1025,7 +1025,8 @@ class Orchestrator:
                 )
             reply_line = (agent_reply or "").strip()
             if reply_line:
-                prior = ("你（AI）上一句说的是" if is_chinese else "What you (the AI) just said")
+                prior = ("Quello che hai detto prima è" if is_italian
+                         else "What you (the AI) just said")
                 user_content = (f"{prior}: {reply_line[:200]}\n"
                                 f"What the user said: {text}\nEmotion: {emotion}{entity_hint}")
             else:

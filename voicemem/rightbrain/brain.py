@@ -811,9 +811,8 @@ Keep each text field at most {n} characters and write it in English."""}
                 # 证据用**用户原话**，不是助手这条经验——归因是读证据来写描述的，
                 # 挂 exp 就成了「拿助手的做法去描述用户特征」。
                 if label and label.lower() not in ("null", "none"):
-                    from voicemem.lang import is_zh
                     label_is_zh = any("一" <= ch <= "鿿" for ch in label)
-                    if label_is_zh != is_zh():
+                    if label_is_zh:
                         print(f"[RBTrait] 语言不符，丢弃：{slot_name} ← {label}", flush=True)
                         return
                     from voicemem.rightbrain.traits_store import Evidence

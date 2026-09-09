@@ -72,10 +72,10 @@ def _parse(argv):
                    help="用哪个 memory space（voicemem_memoryspace/<space>/）")
     p.add_argument("--memory_root", default=os.environ.get("VOICEMEM_MEMORY_ROOT", ""),
                    help="直接指定记忆库目录，给了就盖过 --space")
-    p.add_argument("--lang", choices=["en", "zh"],
-                   default=os.environ.get("VOICEMEM_MEMORY_LANGUAGE", "en"),
-                   help="新建 Memory Space 时用的语言：en（默认）/ zh。"
-                        "已有空间用它自己建的时候定的那个")
+    p.add_argument("--lang", choices=["it", "en"],
+                   default=os.environ.get("VOICEMEM_MEMORY_LANGUAGE", "it"),
+                   help="Lingua della nuova Memory Space: it (default) / en. "
+                        "Gli spazi esistenti usano la lingua salvata alla creazione.")
     p.add_argument("--log-file", default=os.environ.get("VOICEMEM_LOG_FILE", ""),
                    help="日志文件路径；不传则自动写到 results/logs/")
     p.add_argument("--no-file-log", action="store_true",
@@ -88,7 +88,7 @@ ARGS = _parse(None if __name__ == "__main__" else [])
 
 # 必须放在重依赖 import 之前：模型加载、依赖库 warning、Uvicorn 日志和后面所有
 # print 才能从进程启动第一刻起完整落盘。被别的模块 import 时不擅自创建日志文件。
-# 语言：核心默认英文，demo 用 --lang zh 切中文。放在建 VoiceMem 之前，
+# Lingua: il core usa italiano come default; --lang seleziona it o en prima di creare VoiceMem.
 # 因为抽取 prompt 是按它选中英两套示例的。
 from voicemem.lang import set_memory_language as _set_lang   # noqa: E402
 _set_lang(ARGS.lang)
@@ -239,7 +239,7 @@ UI_LANG = ARGS.lang          # 界面语言。右上角随时可切，跟记忆/
 #: 一个英文库里用户偶尔冒一句中文，助手跟着说中文、这轮记忆也就成了中文，
 #: 库就混了。语言在建空间时定死，这里照着执行。
 _LANG_NOTE = {
-    "zh": "全程用中文回复，即使用户用别的语言问你。",
+    "it": "Rispondi sempre in italiano, anche se l'utente scrive in un'altra lingua.",
     "en": "Always reply in English, even if the user writes in another language.",
 }
 
@@ -250,20 +250,20 @@ _LANG_NOTE = {
 #: 为什么不做成随时可切：语言是**库的属性**。检索是按向量做的，中文问句和英文
 #: 记忆在向量空间里离得很远，一个库里中英混存的后果是一半记忆检索不到，而且
 #: 不报错。中途切语言要么把库搞混，要么就得每条存两份——两种都不能接受。
-SPACE_LANG = "en"
+SPACE_LANG = "it"
 
 
 def space_language(name: str) -> str:
-    """读这个空间建的时候定的语言；老空间没有这个字段就按 en。"""
+    """Legge la lingua salvata nello spazio; gli spazi vecchi usano italiano."""
     import json as _json
     d, safe = space_dir(name)
     f = d / f"{safe}.json"
     try:
         v = (_json.loads(f.read_text(encoding="utf-8"))
              .get("space", {}).get("language", ""))
-        return "zh" if str(v).lower().startswith("zh") else "en"
+        return "en" if str(v).lower().startswith("en") else "it"
     except Exception:
-        return "en"
+        return "it"
 
 
 def _write_space_language(name: str, lang: str) -> None:
@@ -286,7 +286,7 @@ def set_lang(lang: str) -> None:
     英文记忆库。
     """
     global UI_LANG
-    UI_LANG = "en" if str(lang).lower().startswith("en") else "zh"
+    UI_LANG = "en" if str(lang).lower().startswith("en") else "it"
     print(f"[lang] 界面切到 {UI_LANG}（空间「{ACTIVE_SPACE}」仍是 {SPACE_LANG}）",
           flush=True)
 
@@ -1068,7 +1068,7 @@ def create_space(name: str, language: str = "") -> dict:
         raise FileExistsError(f"「{safe}」已经存在了")
     d.mkdir(parents=True, exist_ok=True)
     get_space(safe)                      # 建库 + 预热
-    lang = "zh" if str(language or ARGS.lang).lower().startswith("zh") else "en"
+    lang = "en" if str(language or ARGS.lang).lower().startswith("en") else "it"
     _write_space_language(safe, lang)    # 建的时候定一次，之后不再变
     print(f"[space] 新建「{safe}」（语言 {lang}）→ {d}", flush=True)
     return {"id": safe, "name": safe, "count": 0, "language": lang}
@@ -2836,7 +2836,7 @@ _RB_HUMANIZE_PROMPT = (
 #: 规则写了"每条点名"但示例用「他」，输出就全是「他」；规则写了"输出英文"
 #: 但示例全中文，输出就全是中文。所以示例必须跟着目标语言换，而且都要点名。
 _RB_HUMANIZE_EXAMPLES = {
-    "zh": (
+    "it": (
         "  输入  在焦虑时倾向于简短回应\n"
         "  输出  {who}一紧张就闷声不响 —— 我不追问，等他自己开口\n"
         "  输入  考试时容易走神\n"
@@ -2863,9 +2863,9 @@ _RB_HUMANIZE_EXAMPLES = {
 }
 
 
-def _rb_humanize_now(claims: list, name: str = "", lang: str = "zh") -> None:
+def _rb_humanize_now(claims: list, name: str = "", lang: str = "it") -> None:
     """后台线程里跑：一次 LLM 往返改写一批，结果落进 _RB_HUMAN。"""
-    lang_name = "英文" if lang == "en" else "中文"
+    lang_name = "English" if lang == "en" else "Italiano"
     try:
         from openai import OpenAI
         who = name or "他"
@@ -2876,7 +2876,7 @@ def _rb_humanize_now(claims: list, name: str = "", lang: str = "zh") -> None:
             name_rule=(f"· **每条都直接叫他「{name}」**，别用「他」代替——"
                        "页面上每条是独立一行，点名是在说「这是关于谁的」。\n"
                        if name else ""),
-            examples=_RB_HUMANIZE_EXAMPLES.get(lang, _RB_HUMANIZE_EXAMPLES["zh"])
+            examples=_RB_HUMANIZE_EXAMPLES.get(lang, _RB_HUMANIZE_EXAMPLES["it"])
                      .replace("{who}", who))
         r = OpenAI().chat.completions.create(
             model=utils.CHAT_MODEL, temperature=0.7,
