@@ -147,7 +147,7 @@ be English — copying the Chinese wording from the examples is a mistake.
 #: traits 说明块的中英两份。整块换，不只换末尾那组好/差示例——slot 说明里
 #: 自带的例子（"评审前会紧张""被打断就烦"）才是模型照抄的来源，实测只改末尾
 #: 那组没用，英文输入照样存中文。
-_TRAITS_BODY = {"zh": """  情绪        WHEN they feel WHAT — the situation plus the feeling it triggers.
+_TRAITS_BODY = {"it": """  Emozione    WHEN they feel WHAT — the situation plus the feeling it triggers.
               "评审前会紧张", "被打断就烦", "项目延期会焦虑"
   应对方式     what they DO about a feeling, or how they want to be treated.
               "压力大时想被安抚", "难受时想一个人待着"
@@ -201,7 +201,7 @@ sentence very often carries both.
 """}
 
 _EXAMPLES = {
-    "zh": ("  好：讨厌被打断 / 压力大时想被安抚 / 先要结论再要解释\n"
+    "it": ("  bene: non ama essere interrotto / vuole conforto sotto stress / prima la conclusione\n"
            "  差：用户倾向于详细规划和结构化思考。（带主语的整句）\n"
            "  差：我是计算机专业（照抄原话/事实）"),
     "en": ("  good: hates being interrupted / wants comfort under stress / "

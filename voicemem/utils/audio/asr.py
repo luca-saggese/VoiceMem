@@ -135,7 +135,8 @@ class Transcriber:
                                trust_remote_code=False)
 
     def _generate(self, audio) -> str:
-        res = self.model.generate(input=audio, cache={}, language="zh",
+        from voicemem.lang import memory_language
+        res = self.model.generate(input=audio, cache={}, language=memory_language(),
                                   use_itn=True, ban_emo_unk=True)
         if not res:
             return ""

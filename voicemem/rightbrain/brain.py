@@ -680,7 +680,7 @@ class RightBrain:
     #: 归因每段的字数上限——这几段每轮都要拼进 system prompt，松了就是固定开销。
     _EXPERIENCE_MAX_CHARS = 60
 
-    _ATTRIBUTION_PROMPTS = {"zh": """你在给助手的回应打分：用户这轮是不是在对助手那句作出反应？只输出 JSON。
+    _ATTRIBUTION_PROMPTS = {"it": """Valuta se l'utente sta reagendo alla risposta dell'assistente. Restituisci solo JSON.
 
 助手那句：{reply}
 用户这轮：{user}{emotion_line}
@@ -699,7 +699,7 @@ significant 默认 false，只有这几种才 true：
 以下一律 false：继续讲自己的事、回答助手的问题、提新要求、寒暄。
 用户情绪不好 ≠ 助手说错话。
 significant 不管真假，其余字段都要照填（调用方另有判定）。
-文本字段各 ≤{n} 字，使用中文。""",
+Mantieni ogni campo testuale entro {n} caratteri e scrivilo in italiano.""",
         "en": """Decide whether the user is reacting to the assistant's reply. Output JSON only.
 
 The assistant's reply: {reply}
@@ -736,7 +736,7 @@ Keep each text field at most {n} characters and write it in English."""}
         from voicemem.lang import memory_language
         language = memory_language()
         emotion_line = (
-            (f"\n（情绪识别：{emotion}）" if language == "zh" else
+            (f"\nEmozione rilevata: {emotion}" if language == "it" else
              f"\nDetected emotion: {emotion}") if emotion else ""
         )
         raw = self._llm_json(self._ATTRIBUTION_PROMPTS[language].format(
