@@ -61,37 +61,39 @@ class VoiceMem:
 
                  openai_key=None, top_k=5, space=None, models=None,
                  memory_language=None, **kw):
-        # 存进记忆的文本用什么语言："en"（默认）或 "zh"。见 voicemem/lang.py。
-        # slot 名和 8 个规范情绪是内部枚举，不受影响。
-        # 语言落在**这个实例对应的空间**上，不是进程全局——见 resolve_for_space。
-        # openai_key 是 api_key 的旧名字，等价，保留兼容。新代码用 api_key。
-        # 每个模型都能单独选：{"chat": ..., "reply": ..., "embedding": ...,
-        # "tts": ..., "realtime": ...}。省略的角色照旧走 env / 默认值。
-        # 注意这是**进程级**设置，不是这个实例私有的：左右脑那一堆组件懒加载、
-        # 取值时才现读全局表。同一进程里开第二个 VoiceMem 传了不同模型，第一个
-        # 也会跟着变（真发生时 MODELS.update 会打一行）。要严格隔离就分进程。
+        # Lingua del testo salvato nella memoria: "en" (default) o "zh". Vedi voicemem/lang.py.
+        # I nomi degli slot e le 8 emozioni canoniche sono enumerazioni interne, non influenzate.
+        # La lingua si applica allo **spazio corrispondente a questa istanza**, non è globale al processo — vedi resolve_for_space.
+        # openai_key è il vecchio nome di api_key, equivalente, mantenuto per compatibilità. Il nuovo codice usa api_key.
+        # Ogni modello può essere selezionato separatamente: {"chat": ..., "reply": ..., "embedding": ...,
+        # "tts": ..., "realtime": ...}. I ruoli omessi seguono env / valori default come prima.
+        # Nota: questa è un'impostazione **a livello di processo**, non privata di questa istanza: i componenti sinistro/destro fanno lazy loading,
+        # leggono dalla tabella globale solo quando servono. Se apri un secondo VoiceMem nello stesso processo con modelli diversi, il primo
+        # cambia anche lui (MODELS.update stampa una riga quando succede). Per isolamento rigoroso usa processi separati.
+        # I valori vengono letti dalla tabella globale solo al momento dell'uso. Se apri un secondo VoiceMem nello stesso processo con modelli diversi, il primo
+        # cambia anche lui (MODELS.update stampa una riga quando succede). Per isolamento rigoroso usa processi separati.
         if models:
             MODELS.update(models)
-        # space：一套记忆一个目录，落在 ./voicemem_memoryspace/<space>/。
-        # 不给就是 "demo"。memory_root 显式给了就照用（评测要每段对话一个独立库）。
+        # space: una directory per set di memorie, situato in ./voicemem_memoryspace/<space>/.
+        # Se non passato usa "demo". Se memory_root è esplicitamente passato lo usa così com'è (la valutazione richiede un database indipendente per ogni conversazione).
 
         self._o = Orchestrator(api_key=api_key or openai_key,
                                mode=self.MODE_ALIASES.get(mode, mode),
                                memory_root=memory_root, space=space,
                                user_id=user_id, base_url=base_url, **kw)
 
-        # 回复层是门面级的事（编排层只到记忆结果为止），所以 reply 不往下透传。
-        # None → 首次用到时回落到内置 openai provider，见 _reply_fn。
+        # Il layer di risposta è una questione a livello facade (il layer di orchestrazione arriva solo ai risultati della memoria), quindi reply non viene passato oltre.
+        # None → al primo utilizzo fa fallback al provider openai integrato, vedi _reply_fn.
         #
-        # reply 为什么不做成第十个能力位（tts 是能力位，两者都在输出侧）：能力位
-        # 的值既可以是工厂也可以是造好的对象，靠"是不是函数/类"区分（Utils.get）。
-        # 而**回复 provider 本身就是一个函数**——`VoiceMem(reply=my_async_gen_fn)`
-        # 传进来的东西会被当成工厂调一次，正好调错。这个歧义是回复层独有的，
-        # 所以它单独走 normalize() 那条路，不进能力表。
+        # Perché reply non è il decimo slot di capacità (tts è uno slot di capacità, entrambi sono sul lato output): il valore di uno slot di capacità
+        # può essere sia una factory che un oggetto già costruito, si distingue da "se è una funzione/classe" (Utils.get).
+        # Ma **il provider di risposta è esso stesso una funzione** — `VoiceMem(reply=my_async_gen_fn)`
+        # ciò che viene passato verrebbe chiamato come factory una volta, causando errori. Questa ambiguità è unica del layer di risposta,
+        # quindi segue separatamente la strada di normalize(), non entra nella tabella delle capacità.
         self._reply_src = reply
         self._reply_norm = None
-        self._top_k = top_k                  # search() 的默认取几条
-        # 空间目录这时才确定（Orchestrator 解析 space/memory_root），所以放在后面。
+        self._top_k = top_k                  # Quante voci prendere di default da search()
+        # La directory dello spazio viene determinata solo ora (Orchestrator risolve space/memory_root), quindi messa dopo.
         from voicemem.lang import resolve_for_space
         resolve_for_space(self._o._memory_root, memory_language)
 

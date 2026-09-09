@@ -1,13 +1,13 @@
-"""换 embedder 之后，把库里维度作废的向量重新算一遍。
+"""Dopo aver cambiato embedder, ricalcola i vettori obsoleti per dimensione nel database.
 
-什么时候需要：`_embed_text` 现在跟着注入的 embedder 走，而
-`rb_traits` / `graph_entities` 里可能存着上一个 embedder 算的向量。
-维度不符的会被跳过（有警告），右脑检索和实体去重因此失效，直到重新 embed。
+Quando serve: `_embed_text` segue ora l'embedder iniettato, mentre
+`rb_traits` / `graph_entities` potrebbero contenere vettori calcolati dal vecchio embedder.
+Quelli con dimensione non corrispondente vengono saltati (con warning), il retrieval del cervello destro e la deduplicazione delle entity falliscono finché non si re-embed.
 
-跑：python3 tools/reembed.py <space> [--apply] [--local]
-不加 --apply 只统计；--local 按 web demo 的配置（本地 E5）来算，
-不加就是默认 embedder（OpenAI）。**必须跟你实际运行时的配置一致**，
-否则算出来的维度不对，等于没修。
+Esegui: python3 tools/reembed.py <space> [--apply] [--local]
+Senza --apply fa solo statistiche; --local usa la configurazione del web demo (E5 locale) per calcolare,
+altrimenti usa l'embedder default (OpenAI). **Deve essere coerente con la tua configurazione di runtime effettiva**,
+altrimenti la dimensione calcolata è sbagliata e non risolvi nulla.
 """
 import sqlite3
 import sys
@@ -21,13 +21,13 @@ def main() -> None:
     apply = "--apply" in sys.argv
     db = Path("voicemem_memoryspace") / space / f"{space}.sqlite"
     if not db.is_file():
-        print(f"找不到 {db}")
+        print(f"Non trovato {db}")
         return
 
-    # 只建 embedder，不建整个 VoiceMem——后者会打开向量库，跟正在跑的服务抢
-    # qdrant 的文件锁（"Storage folder ... already accessed by another instance"）。
-    # 迁移改的是 sqlite 里的向量列，跟向量库无关。
-    if "--local" in sys.argv:                     # 跟 web demo 的配置对齐
+    # Crea solo l'embedder, non l'intero VoiceMem — quest'ultimo aprirebbe il database vettoriale, contendendo il
+    # file lock di qdrant ("Storage folder ... already accessed by another instance").
+    # La migrazione modifica la colonna dei vettori nello sqlite, non ha nulla a che fare con il database vettoriale.
+    if "--local" in sys.argv:                     # Allineato alla configurazione del web demo
         from voicemem.leftbrain.local_e5_embedder import LocalE5Embedder
         e = LocalE5Embedder()
         embed = e.embed_query_text
@@ -37,14 +37,14 @@ def main() -> None:
         )
         e = OpenAILocalEmbedder(OpenAILocalEmbedderConfig())
         embed = lambda t: e.embed_texts([t])[0]
-    want = len(embed("维度探针"))
-    print(f"{space}: 当前 embedder 输出 {want} 维")
+    want = len(embed("dimensione_probe"))
+    print(f"{space}: embedder corrente produce {want} dimensioni")
 
     import json
     import numpy as np
 
     def vec_len(b):
-        """两张表的存法不同：rb_traits 是 float32 二进制，graph_entities 是 JSON。"""
+        """I due tabelle hanno formati diversi: rb_traits è float32 binario, graph_entities è JSON."""
         if isinstance(b, (bytes, bytearray)):
             return len(np.frombuffer(b, dtype=np.float32))
         try:
@@ -56,7 +56,7 @@ def main() -> None:
         return (np.asarray(vec, dtype=np.float32).tobytes() if table == "rb_traits"
                 else json.dumps([float(x) for x in vec]))
 
-    jobs = []          # (表, id 列, 待重算的行)
+    jobs = []          # (tabella, colonna id, righe da ricalcolare)
     con = sqlite3.connect(db)
     for table, idc, txtc in (("rb_traits", "id", "claim"),
                              ("graph_entities", "id", "name")):
@@ -67,15 +67,15 @@ def main() -> None:
         except sqlite3.OperationalError:
             continue
         stale = [(i, t) for i, t, b in rows if vec_len(b) != want]
-        print(f"  {table:16} 共 {len(rows):4} 条，维度作废 {len(stale)}")
+        print(f"  {table:16} totale {len(rows):4} righe, dimensione obsoleta {len(stale)}")
         if stale:
             jobs.append((table, idc, stale))
 
     if not jobs:
-        print("没有需要重算的。")
+        print("Nessuna riga da ricalcolare.")
         return
     if not apply:
-        print("（未加 --apply，只统计）")
+        print("(senza --apply, solo statistiche)")
         return
 
     total = 0
@@ -88,7 +88,7 @@ def main() -> None:
                 con.commit()
                 print(f"  {table} …{n}/{len(stale)}")
         con.commit()
-    print(f"\n重算完成：{total} 条")
+    print(f"\nRicalcolo completato: {total} righe")
 
 
 if __name__ == "__main__":

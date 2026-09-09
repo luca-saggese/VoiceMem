@@ -19,7 +19,7 @@ Un config completo è così (la config di ogni sezione è opzionale, se omessa u
         "slots":     {"provider": "local"},                 # Classificazione slot usa E5 locale (0 LLM)
         "vad":       {"provider": "silero"},                # Rileva "ha finito di parlare"; custom per sostituire con il proprio
         "memory_engine": {"provider": "mem0"},              # Backend database vettoriale (default mem0)
-        "tts": {"provider": "openai",                       # 出声（可选的一层）
+        "tts": {"provider": "openai",                       # Audio (layer opzionale)
                 "config": {"model": "gpt-4o-mini-tts", "voice": "coral"}},
         "llm": {"provider": "openai",                       # LLM interno cervello sinistro/destro (etichettatura/attribution…)
 
@@ -48,12 +48,12 @@ Mappatura provider → implementazione integrata (semplice da capire a colpo d'o
     vad.provider           silero -> make_vad (integrato, config può dare model / threshold)
                            custom -> l'oggetto config.obj (deve avere is_speech(frame)->bool)
     memory_engine.provider mem0   -> Mem0BackendStore (default, anche omettendo usa il default integrato)
-    tts.provider           openai -> OpenAITTS（OpenAI TTS api，可配 voice/instructions）
-                           local  -> PiperTTS（离线 piper，别名 piper）
-                           voxcpm -> VoxCPMTTS（离线 VoxCPM2）
-                           breeze -> BreezeTTS（Breeze TTS 2 流式服务，可用自然语言
-                                     指挥语气；权重非商用许可，故不做默认）
-    models                 五个角色的模型名，见 voicemem/llm_config.py
+    tts.provider           openai -> OpenAITTS (API OpenAI TTS, configurabile voice/instructions)
+                           local  -> PiperTTS (piper offline, alias piper)
+                           voxcpm -> VoxCPMTTS (VoxCPM2 offline)
+                           breeze -> BreezeTTS (servizio streaming Breeze TTS 2, usa tono di voce con linguaggio naturale
+                                     ; licenza non commerciale, quindi non è il default)
+    models                 Nomi dei modelli per i cinque ruoli, vedi voicemem/llm_config.py
     llm.provider           openai -> scrive su OPENAI_MODEL / OPENAI_API_KEY / OPENAI_BASE_URL
     reply.provider         openai -> voicemem.reply.openai_reply (integrato, streaming)
                            custom -> l'oggetto callable in config.fn (equivalente a VoiceMem(reply=fn))
@@ -83,8 +83,8 @@ def _bad(component: str, provider, known) -> None:
 
 def _embedding_factory(provider, cfg):
 
-    """embedding：local -> 本地 E5；openai -> OpenAILocalEmbedder；
-    其余名字转给 mem0 的 EmbedderFactory（ollama / huggingface / gemini / …）。"""
+    """embedding: local -> E5 locale; openai -> OpenAILocalEmbedder;
+    gli altri nomi vengono passati a EmbedderFactory di mem0 (ollama / huggingface / gemini / …)."""
 
     if provider == "local":
         def make():
@@ -104,11 +104,11 @@ def _embedding_factory(provider, cfg):
             ))
         return make
 
-    # 其余的交给 mem0——它自带十来个 provider（ollama / huggingface / gemini /
+    # Gli altri li lascia a mem0 — ha自带的十多个 provider (ollama / huggingface / gemini /
     # bedrock / azure_openai / vertexai / together / lmstudio / fastembed /
-    # langchain），而 mem0 本来就是依赖，没必要各写一遍。
-    # 内置那两个不走这条：local 是 mem0 没有的本地 E5，openai 这边多支持
-    # dimensions 这类参数。
+    # langchain), e mem0 è già una dipendenza, non serve scriverli uno per uno.
+    # I due integrati non seguono questo percorso: local è E5 locale che mem0 non ha, openai supporta qui parametri extra
+    # come dimensions.
     from voicemem.leftbrain.mem0_embedder import mem0_providers
     known = mem0_providers()
     if provider in known:
@@ -170,10 +170,9 @@ def _memory_engine_factory(provider, cfg):
 
 
 def _tts_factory(provider, cfg):
-    """tts：openai -> OpenAI TTS api；local/piper -> 离线 piper；voxcpm -> VoxCPM2。
+    """tts: openai -> API OpenAI TTS; local/piper -> piper offline; voxcpm -> VoxCPM2.
 
-    provider 省了就跟 TTS_BACKEND 环境变量。provider 名在这儿就校验掉——留到第一次
-    出声才报错的话，那已经是在对话中间了。
+    Se provider è omesso segue la variabile d'ambiente TTS_BACKEND. Il nome del provider viene validato qui — se si aspetta il primo errore audio, sarebbe già a metà conversazione.
     """
     from voicemem.tts import TTS_PROVIDERS
     if provider is not None and str(provider).lower() not in TTS_PROVIDERS:
@@ -189,8 +188,8 @@ def _tts_factory(provider, cfg):
 # provider/config; il core riconosce solo llm al suo interno, tts / realtime restano gestiti dal web demo stesso.
 _REPLY_DEMO_KEYS = ("llm", "tts", "realtime")
 
-#: build_kwargs 认识的顶层键。写错一个键名以前是**静默忽略**——配置看着写了、
-#: 实际一点没生效，比报错难查得多（MODELS.update 对角色名也是同样的态度）。
+#: Chiavi di livello superiore riconosciute da build_kwargs. Un nome di chiave sbagliato prima veniva **silenziosamente ignorato** — la configurazione sembrava scritta ma
+#: in realtà non aveva effetto, molto più difficile da debuggare di un errore (MODELS.update ha lo stesso atteggiamento verso i nomi dei ruoli).
 _KNOWN_TOP = {
     "api_key", "base_url", "mode", "memory_root", "user_id", "space", "models",
     "embedding", "slots", "vad", "memory_engine", "llm", "tts", "reply",
@@ -201,17 +200,17 @@ _KNOWN_TOP = {
 def _check_keys(config: dict) -> None:
     unknown = sorted(set(config) - _KNOWN_TOP)
     if unknown:
-        raise ValueError(f"config 里有不认识的键：{', '.join(unknown)}。"
-                         f"可用的是：{', '.join(sorted(_KNOWN_TOP))}")
-    # reply 段有两种形状：扁平 {"provider","config"}，或 demo 那份
-    # {"llm","tts","realtime"} 嵌套。嵌套里核心只消费 llm，tts 落到顶层同名能力，
-    # realtime 归 web demo 自己读——归属写在这儿，不是"解析了却不管"。
+        raise ValueError(f"config contiene chiavi non riconosciute: {', '.join(unknown)}."
+                         f"Le disponibili sono: {', '.join(sorted(_KNOWN_TOP))}")
+    # La sezione reply ha due forme: piatta {"provider","config"}, o quella del demo
+    # {"llm","tts","realtime"} annidata. Nella forma annidata il core consuma solo llm, tts va allo slot di livello superiore con lo stesso nome,
+    # realtime viene letto dal web demo stesso — l'appartenenza è scritta qui, non è "analizzato ma ignorato".
     seg = config.get("reply")
     if isinstance(seg, dict) and any(k in seg for k in _REPLY_DEMO_KEYS):
         bad = sorted(set(seg) - set(_REPLY_DEMO_KEYS))
         if bad:
-            raise ValueError(f"reply 段（嵌套写法）里有不认识的键：{', '.join(bad)}。"
-                             f"可用的是：{', '.join(_REPLY_DEMO_KEYS)}")
+            raise ValueError(f"La sezione reply (forma annidata) contiene chiavi non riconosciute: {', '.join(bad)}."
+                             f"Le disponibili sono: {', '.join(_REPLY_DEMO_KEYS)}")
 
 
 def _reply_factory(provider, cfg):
@@ -264,9 +263,9 @@ def build_kwargs(config: dict) -> dict:
     if config.get("memory_language") is not None:
         kwargs["memory_language"] = config["memory_language"]
 
-    # ── models：五个角色的模型名，每个都能单独选（chat / reply / embedding /
-    #    tts / realtime，见 voicemem/llm_config.py）。比下面各组件段里的 model
-    #    靠外——组件段写的更就近，仍然优先。──
+    # ── models: nomi dei modelli per i cinque ruoli, ognuno selezionabile separatamente (chat / reply / embedding /
+    #    tts / realtime, vedi voicemem/llm_config.py). Più esterno rispetto al model nelle sezioni dei componenti qui sotto —
+    #    la scrittura nella sezione del componente è più vicina, ma ha comunque priorità.──
     if config.get("models"):
         MODELS.update(config["models"])
 
@@ -297,20 +296,20 @@ def build_kwargs(config: dict) -> dict:
     #    OPENAI_BASE_URL come env, qui si scrivono questi env dal config (api_key/base_url
     #    anche passati a VoiceMem params, coerente con il livello top).──
 
-    # ── llm：左右脑内部 LLM。``llm.model`` 是 ``models.chat`` 的简写（同一件事，
-    #    两个都写时后解析的 llm 段生效）；这一段还额外管 api_key / base_url。
-    #    现有代码读 OPENAI_MODEL / OPENAI_API_KEY /
-    #    OPENAI_BASE_URL 这些 env，这里把 config 落到这些 env（api_key/base_url
-    #    也透传给 VoiceMem 参数，保持和顶层一致）。──
+    # ── llm: LLM interno cervello sinistro/destro. ``llm.model`` è una scorciatoia per ``models.chat`` (stessa cosa,
+    #    se entrambi sono scritti prevale la sezione llm解析ata dopo); questa sezione gestisce anche api_key / base_url.
+    #    Il codice esistente legge OPENAI_MODEL / OPENAI_API_KEY /
+    #    OPENAI_BASE_URL come env, qui si scrivono questi env dal config (api_key/base_url
+    #    anche passati a VoiceMem params, coerente con il livello top).──
 
     if "llm" in config:
         provider, cfg = _split(config["llm"])
         if provider not in (None, "openai"):
             _bad("llm", provider, ["openai"])
         if cfg.get("model"):
-            # 只落在 MODELS 上，不再顺手写 env：查过了，OPENAI_MODEL 没有任何
-            # 第三方库读（openai SDK / mem0 都不读），写它纯粹是让全局状态多一份
-            # 拷贝。api_key / base_url 不同——那两个 SDK 和 mem0 自己读，必须写。
+            # Solo su MODELS, non scrivere anche env: ho verificato, OPENAI_MODEL non viene letto da nessun
+            # library di terze parti (né openai SDK né mem0 lo leggono), scriverlo serve solo a mantenere uno stato globale coerente.
+            # api_key / base_url sono diversi — quei SDK e mem0 li leggono direttamente, devono essere scritti.
             MODELS.update(chat=cfg["model"])
         if cfg.get("api_key"):
             os.environ["OPENAI_API_KEY"] = cfg["api_key"]
@@ -320,8 +319,8 @@ def build_kwargs(config: dict) -> dict:
             kwargs.setdefault("base_url", cfg["base_url"])
 
 
-    # ── tts：第九个可替换位。两处都认——顶层 "tts"，或 demo 那份 reply.tts
-    #    （web/run.py 一直这么写，以前核心不读、白写了，现在读）。顶层优先。──
+    # ── tts: nono slot intercambiabile. Riconosciuto in due posti — livello top "tts", o reply.tts del demo
+    #    (web/run.py ha sempre scritto così, prima il core non leggeva, era inutile; ora legge). Livello top ha priorità.──
     tts_seg = config.get("tts")
     if tts_seg is None:
         _r = config.get("reply") or {}
