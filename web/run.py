@@ -54,8 +54,18 @@ os.environ.setdefault("VOICEMEM_MEMORYSPACE_ROOT", str(_ROOT / "voicemem_memorys
 
 def _parse(argv):
     p = argparse.ArgumentParser(description="voicemem web demo（脑图 + 0–300ms 投机预取）")
+    configured_base_url = os.environ.get("OPENAI_BASE_URL", "").strip().lower()
+    default_mode = os.environ.get("DEMO_MODE")
+    if not default_mode:
+        # OpenRouter e gli altri endpoint OpenAI-compatible normalmente espongono
+        # Chat Completions ma non il protocollo Realtime WebSocket di OpenAI.
+        default_mode = (
+            "realtime"
+            if not configured_base_url or "api.openai.com" in configured_base_url
+            else "llm_tts"
+        )
     p.add_argument("--mode", choices=["llm_tts", "realtime"],
-                   default=os.environ.get("DEMO_MODE", "realtime"),
+                   default=default_mode,
                    help="回复控制流：realtime=OpenAI 原生语音（默认，体验最好）；"
                         "llm_tts=LLM 流→TTS 流（不需要 Realtime 权限，可换本地 TTS）")
     p.add_argument("--host", default="0.0.0.0")

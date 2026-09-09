@@ -29,6 +29,9 @@ RT_MODEL = resolve_model(role="realtime")
 #: gpt-realtime 上可选：alloy / ash / ballad / coral / echo / sage / shimmer /
 #: verse / marin / cedar —— marin 和 cedar 是新加的，起伏和呼吸感明显强。
 RT_VOICE = os.environ.get("OPENAI_REALTIME_VOICE", "marin")
+# Il client viene creato qui per compatibilità con le funzioni web esistenti;
+# legge OPENAI_API_KEY/OPENAI_BASE_URL, quindi funziona anche con OpenRouter
+# per Chat Completions. OpenRouter non supporta però il ramo Realtime WebSocket.
 client = AsyncOpenAI()
 
 
