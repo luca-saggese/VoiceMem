@@ -1,33 +1,19 @@
-"""存进记忆的文本用什么语言。
+"""Language support for VoiceMem — Italian and English only.
 
-只有两个值：``en``（默认）和 ``zh``。
+Lingue supportate: ``("it", "en")``. Default: ``"it"``.
+Il cinese (zh) non è più una lingua selezionabile in questo fork.
 
-左脑早就有 ``use_input_language``（``extract_facts_openai``），抽出来的事实跟着
-用户说话的语言走。右脑没有对应的东西：特质标签和情绪词的 prompt 里写死了"中文，
-5-15字"，于是英文用户的记忆库里事实是英文、画像是中文——这份画像每轮都会拼进
-system prompt 给回复模型，中文就这样漏进了英文对话。
-
-**为什么不做"跟随用户语言"**：一个记忆库应该只有一种语言。跟随输入意味着同一
-个库里中英混存，检索是按向量做的，中文问句和英文记忆在向量空间里离得很远，
-混存等于让一半记忆检索不到。语言是**库的属性**，不是单句的属性。
-
-**不受这个开关影响的两样东西**，它们是内部枚举、不是给人读的文本：
-
-  · slot 名（情绪 / 表达风格 / 思维模式 / 应对方式 / 喜好与厌恶）——检索、配额、
-    脑图聚类都按它做键，翻译了会全线对不上。
-  · 8 个规范情绪（焦虑/悲伤/委屈/孤独/纠结/平静/开心/疲惫）——``anchor_router``
-    里有中英两张关键词表往它们上归一，所以模型**输出**英文情绪词没问题，
-    归一之后落到的仍是这 8 个内部值。
+La lingua della Memory Space è la sorgente di verità per ASR, prompt, memoria, risposta e UI.
 """
 
 from __future__ import annotations
 
 import os
 
-#: 环境变量名。也可以 VoiceMem(memory_language="zh")、demo 的 --lang。
+#: 环境变量名。也可以 VoiceMem(memory_language="it")、demo 的 --lang。
 ENV = "VOICEMEM_MEMORY_LANGUAGE"
-SUPPORTED = ("en", "zh")
-DEFAULT = "en"
+SUPPORTED = ("it", "en")
+DEFAULT = "it"
 
 _override: str | None = None
 
@@ -61,7 +47,7 @@ def resolve_for_space(memory_root, explicit: str | None = None) -> str:
     """把这个实例的语言定下来，并落到它对应的**空间**上。
 
     ``VoiceMem(memory_language=...)`` 以前只写进程级 override，于是：先建一个
-    zh 实例、再建一个不传参数的实例，后者会继承 zh——文档写的默认 en 变成了
+    it 实例、再建一个不传参数的实例，后者会继承 it——文档写的默认 en 变成了
     取决于构造顺序（issue #9）。根子是同一个概念存了两个地方：demo 那边从空间
     json 读，库这边只改全局。
 
@@ -113,13 +99,22 @@ def resolve_for_space(memory_root, explicit: str | None = None) -> str:
     return lang
 
 
-def is_zh() -> bool:
-    return memory_language() == "zh"
+def is_it() -> bool:
+    return memory_language() == "it"
+
+
+def is_en() -> bool:
+    return memory_language() == "en"
+
+
+def language_name() -> str:
+    """Restituisce il nome leggibile della lingua corrente (per UI)."""
+    return "Italiano" if is_it() else "English"
 
 
 def label_rule() -> str:
     """拼进 prompt 的一句语言要求。所有存进记忆的自由文本都该带上它。"""
-    lang = "Chinese" if is_zh() else "English"
+    lang = "Italiano" if is_it() else "English"
     return (f"Write every label in {lang}, whatever language the speaker used. "
             f"Do not mix in any other language.")
 
@@ -130,14 +125,18 @@ def label_rule() -> str:
 #: 用户看的那一份**要跟库语言一致，否则英文库里会冒出「开心」「平静」。
 #: 这里挑的英文词都在 anchor_router._EMOTION_KEYWORDS_EN 里，所以英文标签再被
 #: 读回来时能正确归一回同一个内部值，不会丢。
+_EMOTION_IT = {
+    "anxious": "ansioso", "sad": "triste", "wronged": "ingiustizzato", "lonely": "solo",
+    "conflicted": "indeciso", "calm": "calmo", "happy": "felice", "tired": "stanco",
+}
 _EMOTION_EN = {
-    "焦虑": "anxious", "悲伤": "sad", "委屈": "wronged", "孤独": "lonely",
-    "纠结": "conflicted", "平静": "calm", "开心": "happy", "疲惫": "tired",
+    "ansioso": "anxious", "triste": "sad", "ingiustizzato": "wronged", "solo": "lonely",
+    "indeciso": "conflicted", "calmo": "calm", "felice": "happy", "stanco": "tired",
 }
 
 
 def display_emotion(canonical: str) -> str:
     """规范情绪 → 当前库语言下的写法。不认识的原样返回。"""
-    if is_zh():
-        return canonical
+    if is_it():
+        return _EMOTION_IT.get(canonical, canonical)
     return _EMOTION_EN.get(canonical, canonical)
