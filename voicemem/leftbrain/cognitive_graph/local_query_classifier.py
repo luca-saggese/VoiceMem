@@ -5,10 +5,10 @@
 # iniettandolo, spostando il passo ``Classify`` (estrai slot + entity) dall'API OpenAI al modello locale —
 # completamente simmetrico all'iniezione di ``embedding``:
 
-    from voicemem import VoiceMem
-    from voicemem.leftbrain.cognitive_graph.local_query_classifier import LocalQueryClassifier
-    vm = VoiceMem(schema=lambda: LocalQueryClassifier())   # slots 走本地 E5，0 LLM
-    vm.search("Dove lavoro?")                                  # Classify non chiama più LLM
+#     from voicemem import VoiceMem
+#     from voicemem.leftbrain.cognitive_graph.local_query_classifier import LocalQueryClassifier
+#     vm = VoiceMem(schema=lambda: LocalQueryClassifier())   # slots 走本地 E5，0 LLM
+#     vm.search("Dove lavoro?")                              # Classify non chiama più LLM
 
 
 # Scelte progettuali (spiegate onestamente, nascosto nulla):
@@ -20,9 +20,9 @@
 #   comunque nel lato scrittura, non nel percorso caldo della ricerca. ``engine.Classify`` rileva automaticamente l'assenza di ``classify_child``
 #   e salta il drill-down, usando solo base-7.
 
-I prefissi ``"query: "`` / ``"passage: "`` di E5 sono obbligatori (non decorativi). Il modello viene scaricato automaticamente al primo utilizzo;
-passa ``model=`` per riutilizzare un SentenceTransformer già caricato (es. condiviso con l'embedder locale, risparmia memoria).
-"""
+# I prefissi ``"query: "`` / ``"passage: "`` di E5 sono obbligatori (non decorativi). Il modello viene scaricato automaticamente al primo utilizzo;
+# passa ``model=`` per riutilizzare un SentenceTransformer già caricato (es. condiviso con l'embedder locale, risparmia memoria).
+# """
 from __future__ import annotations
 
 from typing import Callable, Sequence
