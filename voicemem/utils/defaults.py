@@ -39,15 +39,11 @@ def default_utils(base_url, memory_root):
         from voicemem.utils.audio.voiceprint.speaker_encoder import SpeakerEncoder
         return SpeakerEncoder(device="cpu")
     def asr():
-        # FunASR paraformer-zh-streaming default (più accurato per cinese); VOICEMEM_ASR=sherpa fa fallback a
-        # sherpa-onnx streaming zipformer (bilingue cinese-inglese, puro onnx senza dipendenze torch).
-        if os.environ.get("VOICEMEM_ASR", "funasr").lower() == "sherpa":
-            from voicemem.utils.audio.asr import StreamingASR
-            from voicemem.utils.common.paths import model_path
-            return StreamingASR(str(model_path(
-                "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20", kind="asr")))
-        from voicemem.utils.audio.asr import FunASRStreamingASR
-        return FunASRStreamingASR()
+        # Nemotron 3.5 ASR Streaming 0.6B (EN/IT) — unico backend ASR.
+        from voicemem.utils.audio.asr import NemotronStreamingASR
+        from voicemem.utils.common.paths import models_dir
+        model_dir = models_dir() / "asr" / "sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-560ms-int8-2026-06-11"
+        return NemotronStreamingASR(model_dir=model_dir, language="it")
     def vad():
         # VAD per rilevare "ha finito di parlare". Silero integrato come default; per usare il proprio passa un oggetto con is_speech(frame)->bool
         # (VoiceMem(vad=lambda: MyVad()) o la sezione vad del config).
