@@ -3,8 +3,7 @@
 #
 #   models/
 #     vad/        silero_vad.onnx                                  Rileva "ha finito di parlare"
-#     asr/        funasr-paraformer-zh-streaming                   ASR streaming (predefinito, più accurato per il cinese)
-#                 sherpa-onnx-streaming-zipformer-bilingual-zh-en… ASR streaming (fallback, puro onnx senza dipendenze torch)
+#     asr/        sherpa-onnx-nemotron-3.5-asr-streaming-0.6b…    ASR streaming multilingua EN/IT (Nemotron 3.5)
 #     speaker/    3dspeaker_speech_eres2net_base_sv_zh-cn…onnx     Voiceprint del parlante
 #     embedding/  intfloat/multilingual-e5-small                   Vettori di memoria + classificazione slot (condivisi)
 #     scene/      MIT/ast-finetuned-audioset-10-10-0.4593          Scena acustica
@@ -52,14 +51,16 @@ PY
 else
   # Scarica uno per uno da varie fonti ufficiali pubbliche (quando HF è inaccessibile, o si vogliono verificare origini e licenze)
   REL="https://github.com/k2-fsa/sherpa-onnx/releases/download"
-  ASR_DIR="sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20"
+  NEMOTRON_DIR="sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-560ms-int8-2026-06-11"
   mkdir -p "${DEST}"/{vad,asr,speaker,embedding,scene,emotion}
 
-  echo "[1/2] Fonte ufficiale: VAD silero (MIT)…"
+  echo "[1/3] Fonte ufficiale: VAD silero (MIT)…"
   curl -L -o "${DEST}/vad/silero_vad.onnx" "${REL}/asr-models/silero_vad.onnx"
 
-  echo "      Fonte ufficiale: ASR streaming di fallback ${ASR_DIR} (Apache-2.0, k2-fsa)…"
-  [ -d "${DEST}/asr/${ASR_DIR}" ] || curl -L "${REL}/asr-models/${ASR_DIR}.tar.bz2" | tar xj -C "${DEST}/asr"
+  echo "      Fonte ufficiale: Nemotron 3.5 ASR Streaming 0.6B EN/IT (Apache-2.0, k2-fsa)…"
+  if [ ! -f "${DEST}/asr/${NEMOTRON_DIR}/encoder.int8.onnx" ]; then
+    curl -L "${REL}/asr-models/${NEMOTRON_DIR}.tar.bz2" | tar xj -C "${DEST}/asr"
+  fi
 
   # Nota: il tag di release ufficiale è scritto proprio "recongition" (con errore)
   echo "      Fonte ufficiale: voiceprint 3D-Speaker ERes2Net (Apache-2.0)…"
@@ -75,9 +76,7 @@ dest = sys.argv[1]
 # varianti quantizzate onnx / openvino, scaricare l'intero repository sono 4.2G, prendendo solo i necessari circa 1.4G — risparmi molto nel download e
 # nel successivo trasferimento al repository di pubblicazione.
 SKIP = ["*.bin", "onnx/*", "openvino/*", "*.tflite", "*.h5", "*.msgpack", "coreml/*"]
-for kind, repo, skip in [# ASR streaming predefinito. Senza di esso funasr scaricherebbe 848M solo quando l'utente dice la prima frase
-                         ("asr/funasr-paraformer-zh-streaming",
-                          "funasr/paraformer-zh-streaming", ["example/*", "fig/*"]),
+for kind, repo, skip in [ # embedding multilingua per memoria + slot classification
                          ("embedding", "intfloat/multilingual-e5-small", SKIP),
                          ("scene",     "MIT/ast-finetuned-audioset-10-10-0.4593", SKIP),
                          # I pesi di SenseVoice sono proprio model.pt, non possono essere esclusi con il metodo *.bin
