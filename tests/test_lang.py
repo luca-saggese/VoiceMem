@@ -73,10 +73,10 @@ class TestLangModule:
         lang._override = "en"
         assert is_en() is True
 
-    def test_no_is_zh_function(self):
-        """Non deve esistere is_zh() — sostituita da is_it()/is_en()."""
+    def test_is_zh_compatibility_is_always_false(self):
+        """Il predicato legacy non abilita più il cinese."""
         from voicemem import lang
-        assert not hasattr(lang, "is_zh"), "is_zh() deve essere eliminato"
+        assert lang.is_zh() is False
 
     def test_no_chinese_in_supported(self):
         """Nessun riferimento a zh in SUPPORTED o DEFAULT."""

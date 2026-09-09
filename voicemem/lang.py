@@ -43,6 +43,15 @@ def memory_language() -> str:
     return _check(env) if env else DEFAULT
 
 
+def is_zh() -> bool:
+    """Compatibilità interna temporanea: il cinese non è selezionabile.
+
+    I call site legacy usano ancora questo predicato binario; restituire sempre
+    ``False`` mantiene il ramo non-cinese mentre vengono migrati a API neutrali.
+    """
+    return False
+
+
 def resolve_for_space(memory_root, explicit: str | None = None) -> str:
     """把这个实例的语言定下来，并落到它对应的**空间**上。
 
