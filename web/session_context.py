@@ -60,7 +60,7 @@ class SessionBuffer:
         with self._lock:
             return list(self._contexts.get((session_id, space), []))
 
-    def render(self, session_id: str, space: str, language: str = "zh") -> str:
+    def render(self, session_id: str, space: str, language: str = "it") -> str:
         turns = self.turns(session_id, space)
         if not turns:
             return ""
@@ -68,13 +68,16 @@ class SessionBuffer:
             lines = ["Conversation in this session not yet stored in long-term memory (latest last):"]
             user_label, assistant_label = "User", "Assistant"
         else:
-            lines = ["本次会话中尚未写入长期记忆的对话（最后一条离现在最近）："]
-            user_label, assistant_label = "用户", "你"
+            lines = ["Conversation in this session not yet stored in long-term memory (latest last):"]
+            user_label, assistant_label = "User", "Assistant"
+        if language == "it":
+            lines = ["Conversazioni di questa sessione non ancora scritte nella memoria a lungo termine (l'ultima è la più recente):"]
+            user_label, assistant_label = "Utente", "Assistente"
         for turn in turns:
             lines.append(f"{user_label}: {turn.user_text}")
             label = assistant_label
             if turn.interrupted:
-                label += " (interrupted)" if language == "en" else "（被打断）"
+                label += " (interrotto)"
             lines.append(f"{label}: {turn.assistant_text}")
         return "\n".join(lines)
 

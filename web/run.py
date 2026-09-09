@@ -912,8 +912,8 @@ _SESSION_CONTEXT = SessionBuffer(text_limit=_HISTORY_CHARS)
 
 
 def _history_block(session_id: str, space: str) -> str:
-    from voicemem.lang import is_zh
-    return _SESSION_CONTEXT.render(session_id, space, "zh" if is_zh() else "en")
+    from voicemem.lang import memory_language
+    return _SESSION_CONTEXT.render(session_id, space, memory_language())
 
 
 def _push_history(session_id: str, space: str, user_text: str, reply_text: str,
