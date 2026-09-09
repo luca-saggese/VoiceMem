@@ -60,7 +60,7 @@ class VoiceMem:
                  user_id="voice_user", base_url=None, reply=None,
 
                  openai_key=None, top_k=5, space=None, models=None,
-                 memory_language=None, **kw):
+                 memory_language=None, model_name=None, **kw):
         # Lingua del testo salvato nella memoria: "en" (default) o "zh". Vedi voicemem/lang.py.
         # I nomi degli slot e le 8 emozioni canoniche sono enumerazioni interne, non influenzate.
         # La lingua si applica allo **spazio corrispondente a questa istanza**, non è globale al processo — vedi resolve_for_space.
@@ -72,6 +72,11 @@ class VoiceMem:
         # cambia anche lui (MODELS.update stampa una riga quando succede). Per isolamento rigoroso usa processi separati.
         # I valori vengono letti dalla tabella globale solo al momento dell'uso. Se apri un secondo VoiceMem nello stesso processo con modelli diversi, il primo
         # cambia anche lui (MODELS.update stampa una riga quando succede). Per isolamento rigoroso usa processi separati.
+        if model_name:
+            models = {**(models or {}), "chat": model_name}
+        if base_url:
+            import os
+            os.environ["OPENAI_BASE_URL"] = base_url
         if models:
             MODELS.update(models)
         # space: una directory per set di memorie, situato in ./voicemem_memoryspace/<space>/.

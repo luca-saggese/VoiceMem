@@ -99,6 +99,44 @@ hf download zhifeixie/VoiceMem_Default_Models_Env --local-dir ./models
 
 ### Utilizzo di base <a id="interfaces"></a>
 
+#### Utilizzo con OpenRouter o un endpoint OpenAI-compatible
+
+VoiceMem accetta un endpoint compatibile con l'API OpenAI e un nome modello
+separato. `model_name` configura il modello chat usato dal motore; il valore
+può essere, per esempio, `openai/gpt-4o-mini` oppure un modello disponibile su
+OpenRouter.
+
+```python
+import os
+from voicemem import VoiceMem
+
+vm = VoiceMem(
+  mode="leftbrain_only",
+  api_key=os.environ["OPENROUTER_API_KEY"],
+  base_url="https://openrouter.ai/api/v1",
+  model_name="openai/gpt-4o-mini",
+)
+```
+
+La stessa configurazione può essere dichiarata con `from_config`:
+
+```python
+vm = VoiceMem.from_config({
+  "mode": "leftbrain_only",
+  "api_key": os.environ["OPENROUTER_API_KEY"],
+  "base_url": "https://openrouter.ai/api/v1",
+  "model_name": "openai/gpt-4o-mini",
+})
+```
+
+È anche possibile usare le variabili standard dell'SDK OpenAI:
+
+```bash
+export OPENAI_API_KEY="$OPENROUTER_API_KEY"
+export OPENAI_BASE_URL="https://openrouter.ai/api/v1"
+export VOICEMEM_CHAT_MODEL="openai/gpt-4o-mini"
+```
+
 #### Esecuzione come motore di memoria offline
 
 ```python

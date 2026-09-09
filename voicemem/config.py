@@ -11,7 +11,8 @@ Un config completo è così (la config di ogni sezione è opzionale, se omessa u
 
     CONFIG = {
         "api_key": "sk-...",              # Livello top, passato a VoiceMem (scritto anche in OPENAI_API_KEY)
-        "base_url": None,                 # Livello top, passato a VoiceMem
+        "base_url": None,                 # Endpoint OpenAI-compatible, per esempio OpenRouter
+        "model_name": None,               # Alias del modello chat, per esempio openai/gpt-4o-mini
         "mode": "multi_modal",            # Livello top, passato a VoiceMem
 
 
@@ -191,7 +192,7 @@ _REPLY_DEMO_KEYS = ("llm", "tts", "realtime")
 #: Chiavi di livello superiore riconosciute da build_kwargs. Un nome di chiave sbagliato prima veniva **silenziosamente ignorato** — la configurazione sembrava scritta ma
 #: in realtà non aveva effetto, molto più difficile da debuggare di un errore (MODELS.update ha lo stesso atteggiamento verso i nomi dei ruoli).
 _KNOWN_TOP = {
-    "api_key", "base_url", "mode", "memory_root", "user_id", "space", "models",
+    "api_key", "base_url", "model_name", "mode", "memory_root", "user_id", "space", "models",
     "embedding", "slots", "vad", "memory_engine", "llm", "tts", "reply",
     "top_k", "memory_language",
 }
@@ -250,6 +251,8 @@ def build_kwargs(config: dict) -> dict:
         kwargs["api_key"] = config["api_key"]
     if config.get("base_url") is not None:
         kwargs["base_url"] = config["base_url"]
+    if config.get("model_name") is not None:
+        kwargs["model_name"] = config["model_name"]
     if config.get("mode") is not None:
         kwargs["mode"] = config["mode"]
     if config.get("memory_root") is not None:
