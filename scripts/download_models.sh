@@ -114,6 +114,15 @@ for kind, repo, skip in [ # embedding multilingua per memoria + slot classificat
     print(f"        {kind} ← {repo}")
     snapshot_download(repo_id=repo, local_dir=f"{dest}/{kind}", ignore_patterns=skip)
 PY
+  echo "      CosyVoice3 TTS (FunAudioLLM/Fun-CosyVoice3-0.5B-2512)…"
+  python3 - "${DEST}/tts" <<'PY'
+import sys
+from huggingface_hub import snapshot_download
+snapshot_download(
+    repo_id="FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
+    local_dir=f"{sys.argv[1]}/Fun-CosyVoice3-0.5B-2512",
+)
+PY
 fi
 
 if [ "${WANT_SLM}" = "1" ]; then
