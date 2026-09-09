@@ -3,8 +3,8 @@ from pathlib import Path
 
 DATA = Path(__file__).parent / "data" / "sample.jsonl"
 
-# 已发布 adapter（Qwen3.6-35B-A3B QLoRA v2）那次训练用的超参，照默认跑 = 复现同一次训练。
-# 之前从 models/ 下的清单文件读，那份清单已随模型目录一起删掉，值直接写在这里。
+# Iperparametri usati per quella training dell'adapter pubblicato (Qwen3.6-35B-A3B QLoRA v2), eseguire con default = riprodurre la stessa training.
+# Prima si leggevano dal file di elenco sotto models/, quel file è stato cancellato insieme alla directory dei modelli, i valori sono scritti direttamente qui.
 BASE = "Qwen/Qwen3.6-35B-A3B"
 ADAPTER = {
     "format": "PEFT LoRA",
@@ -13,7 +13,7 @@ ADAPTER = {
     "dropout": 0.05,
     "bias": "none",
     "task_type": "CAUSAL_LM",
-    # 按 Qwen3.6-35B-A3B 的模块命名写死；换基座必须改（不确定就用 "all-linear"）。
+    # Scritto hardcoded secondo la denominazione dei moduli di Qwen3.6-35B-A3B; cambiando il modello base devi modificarlo (se non sei sicuro usa "all-linear").
     "target_modules": (
         r"^(model\.language_model(?=\.).*\.(shared_expert_gate|down_proj|out_proj|"
         r"in_proj_a|in_proj_b|q_proj|in_proj_z|gate_proj|up_proj|in_proj_qkv|"

@@ -28,13 +28,13 @@ sft_main(SftArguments(
     lora_alpha=args.alpha,
     lora_dropout=ADAPTER["dropout"],
     lora_bias=ADAPTER["bias"],
-    # 这条正则按 Qwen3.6-35B-A3B 的模块命名写死，换基座必须换
+    # Questa regex è scritta hardcoded secondo la denominazione dei moduli di Qwen3.6-35B-A3B, cambiando il modello base devi cambiarla
     target_regex=ADAPTER["target_modules"],
     quant_bits=None if args.no_4bit else 4,
     quant_method=None if args.no_4bit else "bnb",
     torch_dtype="bfloat16",
     max_length=args.max_len,
-    # 只有最后一轮 assistant 算 loss，历史轮不算
+    # Solo l'ultima round assistant calcola il loss, i round storici no
     loss_scale="last_round",
     num_train_epochs=args.epochs,
     learning_rate=args.lr,

@@ -33,19 +33,18 @@ Risultato salvato in results/locomo.json
 | `--inspect` | Analizza solo il dataset e stampa, non esegue la valutazione | Off |
 | `--no-score` | Genera solo le risposte senza valutare, poi valuta con `score.py` | Off |
 
-结果每跑完一段就落盘，所以跑几小时的评测中途挂了，加 `--resume` 接着跑即可。
+I risultati vengono salvati su disco dopo ogni conversazione completata, quindi se un'evaluazione di diverse ore si interrompe, aggiungi `--resume` per continuare da dove eri rimasto.
 
-## 重新判分
+## Rivalutazione
 
-检索 + 作答是贵的那一半（每题一次 search 加一次生成），判分是便宜的一半。想换裁判
-模型、或者修了判分口径的 bug，不用重跑贵的那半：
+Il retrieval + la risposta sono la metà costosa (una search + una generation per domanda), il scoring è la metà economica. Se vuoi cambiare il modello judge o correggere bug nel criterio di valutazione, non serve ripetere la parte costosa:
 
 ```bash
 python evaluation/score.py --file results/locomo.json --judge gpt-4o
 ```
 
-原始问题是从数据集重新读的（按对话 id + 题 id 对上），不是从结果文件里凑——rubric、
-meta 这些判分要用的字段结果文件里没存。会打印改判了几题。
+Le domande originali vengono rilete dal dataset (allineate per id conversazione + id domanda), non assemblate dal file dei risultati — rubric,
+meta e altri campi usati per lo scoring non sono salvati nel file dei risultati. Verrà stampato quante domande sono state riscritte.
 
 想彻底分两段跑，生成时加 `--no-score`。
 
