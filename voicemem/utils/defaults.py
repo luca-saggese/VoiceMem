@@ -51,22 +51,22 @@ def default_utils(base_url, memory_root):
         model_dir = models_dir() / "asr" / "sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-560ms-int8-2026-06-11"
         return NemotronStreamingASR(model_dir=model_dir, language=space_lang)
     def vad():
-        # 判「说完了」的 VAD。默认内置 silero；换自己的传一个有 is_speech(frame)->bool
-        # 的对象即可（VoiceMem(vad=lambda: MyVad()) 或 config 的 vad 段）。
+        # VAD per rilevare "ha finito di parlare". Silero integrato come default; per usare il proprio passa un oggetto con is_speech(frame)->bool
+        # (VoiceMem(vad=lambda: MyVad()) o la sezione vad del config).
         from voicemem.utils.audio.stream_io import make_vad
         return make_vad()
     def tts():
-        # 第九个可替换位。核心链路不用它——记忆系统只到文本为止，出声是调用方的事，
-        # 所以 tts 不进 _NEED（warmup 不会拉起来），谁要出声谁 utils.get("tts")。
-        # 不把 base_url 传下去：那个通常指向自建 LLM/embedding 服务，多半没有
-        # /audio/speech，跟过去只会在出声时才炸。要换端点用 OPENAI_TTS_BASE_URL。
+        # Nono slot intercambiabile. Il percorso core non lo usa — il sistema memoria arriva solo al testo, l'audio è compito del chiamante,
+        # quindi tts non entra in _NEED (warmup non lo avvia), chi vuole audio fa utils.get("tts").
+        # Non passo base_url oltre: di solito punta a un servizio LLM/embedding self-hosted, che probabilmente non ha
+        # /audio/speech, passandolo si verificherebbe un errore solo quando si tenta l'audio. Per cambiare endpoint usa OPENAI_TTS_BASE_URL.
         from voicemem.tts import make_tts
         return make_tts()
     def memory_engine():
         from pathlib import Path
         from voicemem.leftbrain.mem0_backend_store import Mem0BackendStore
-        # memory_root 由 Orchestrator 传下来（已解析过默认值）；这里的兜底只在
-        # 直接构造 default_utils 时用得上，跟上面保持同一个默认。
+        # memory_root viene passato da Orchestrator (valori default già risolti); il fallback qui è utile solo
+        # quando si costruisce default_utils direttamente, mantiene lo stesso default di sopra.
         return Mem0BackendStore(embedding(),
                                 memory_root=Path(memory_root or Path.cwd() / "voicemem_memory"))
     return {"embedding": embedding, "slots": slots, "entity": entity, "emotion": emotion,

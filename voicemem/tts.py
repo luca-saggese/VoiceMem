@@ -1,23 +1,23 @@
 """Testo → voce. Il layer di risposta produce solo testo (vedi ``voicemem/reply.py``), qui avviene la conversione vocale, è un layer opzionale.
 
-四个内置后端，都吐 **24kHz 单声道 PCM16**：默认 OpenAI api；``local`` / ``piper``
-走离线 piper；``voxcpm`` 走 VoxCPM2；``breeze`` 连 Breeze TTS 2 的流式服务
-（自然语言指挥语气，见 ``BreezeTTS``；非商用许可，所以不是默认）。
+Quattro backend integrati, tutti producono **24kHz mono PCM16**: default API OpenAI; ``local`` / ``piper``
+usano piper offline; ``voxcpm`` usa VoxCPM2; ``breeze`` si connette al servizio streaming Breeze TTS 2
+(tono di voce con linguaggio naturale, vedi ``BreezeTTS``; licenza non commerciale, quindi non è il default).
 
-**这是第九个可替换位**（前八个见 ``voicemem/utils/defaults.py``）。契约只有一条方法::
+**Questo è il nono slot intercambiabile** (gli altri otto vedi ``voicemem/utils/defaults.py``). Il contratto ha un solo metodo::
 
     class MyTTS:
-        async def stream(self, text: str):     # 异步产出 24kHz 单声道 PCM16 bytes
+        async def stream(self, text: str):     # produce bytes 24kHz mono PCM16 in modo asincrono
             ...
 
-    vm = VoiceMem(tts=lambda: MyTTS())                      # 写法 A：注入
-    vm = VoiceMem.from_config({"tts": {"provider": "voxcpm"}})   # 写法 B：声明式
+    vm = VoiceMem(tts=lambda: MyTTS())                      # Scrittura A: iniezione
+    vm = VoiceMem.from_config({"tts": {"provider": "voxcpm"}})   # Scrittura B: dichiarativa
 
-核心链路不碰它——记忆系统只到文本为止，出声是调用方的事。所以 ``tts`` 不在
-``_NEED`` 里（不会被 warmup 拉起来），谁要出声谁 ``vm.utils.get("tts")``；
-没装 piper / voxcpm 的用户不受影响。
+Il percorso core non lo tocca — il sistema memoria arriva solo al testo, l'audio è compito del chiamante. Quindi ``tts`` non è in
+``_NEED`` (non viene avviato da warmup), chi vuole audio fa ``vm.utils.get("tts")``;
+ gli utenti senza piper / voxcpm installati non sono influenzati.
 
-支持对齐信息的后端可以产出 ``TimedAudioChunk``；时间戳使用相对本段开头的样本
+I backend che supportano informazioni di allineamento possono produrre ``TimedAudioChunk``; gli timestamp usano campioni relativi all'inizio del segmento
 位置。原有的纯 ``bytes`` 后端不需要修改。
 
 
