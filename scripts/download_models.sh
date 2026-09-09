@@ -63,6 +63,12 @@ PY
     echo "      Fonte ufficiale: Nemotron 3.5 ASR Streaming 0.6B EN/IT …"
     curl --fail --location --retry 3 "${NEMOTRON_URL}" | tar xj -C "${DEST}/asr"
   fi
+  echo "      Emotion2Vec+ base (emotion2vec/emotion2vec_plus_base)…"
+  python3 - "${DEST}/emotion2vec" <<'PY'
+import sys
+from huggingface_hub import snapshot_download
+snapshot_download(repo_id="emotion2vec/emotion2vec_plus_base", local_dir=sys.argv[1])
+PY
 else
   # Scarica uno per uno da varie fonti ufficiali pubbliche (quando HF è inaccessibile, o si vogliono verificare origini e licenze)
   REL="https://github.com/k2-fsa/sherpa-onnx/releases/download"
@@ -81,7 +87,7 @@ else
   curl -L -o "${DEST}/speaker/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx" \
     "${REL}/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx"
 
-  echo "      Fonte ufficiale: embedding / scene / emotion (repository HF originali)…"
+  echo "      Fonte ufficiale: embedding / scene / emotion / emotion2vec (repository HF originali)…"
   python3 - "${DEST}" <<'PY'
 import sys
 from huggingface_hub import snapshot_download
@@ -94,7 +100,8 @@ for kind, repo, skip in [ # embedding multilingua per memoria + slot classificat
                          ("embedding", "intfloat/multilingual-e5-small", SKIP),
                          ("scene",     "MIT/ast-finetuned-audioset-10-10-0.4593", SKIP),
                          # I pesi di SenseVoice sono proprio model.pt, non possono essere esclusi con il metodo *.bin
-                         ("emotion",   "FunAudioLLM/SenseVoiceSmall", ["*.onnx", "*.tflite"])]:
+                         ("emotion",   "FunAudioLLM/SenseVoiceSmall", ["*.onnx", "*.tflite"]),
+                         ("emotion2vec", "iic/emotion2vec_plus_base", [])]:
     print(f"        {kind} ← {repo}")
     snapshot_download(repo_id=repo, local_dir=f"{dest}/{kind}", ignore_patterns=skip)
 PY
