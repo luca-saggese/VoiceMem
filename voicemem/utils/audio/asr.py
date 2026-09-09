@@ -75,19 +75,27 @@ class NemotronStreamingASR:
         while self.rec.is_ready(self._stream):
             self.rec.decode_stream(self._stream)
         result = self.rec.get_result(self._stream)
-        if result and getattr(result, "text", ""):
-            self._text += result.text
+        # sherpa-onnx restituisce normalmente una stringa cumulativa; alcuni
+        # mock/backend espongono invece un oggetto con attributo ``text``.
+        # Non concatenare: il risultato sherpa contiene già tutto il partial.
+        self._text = self._result_text(result)
         return self._text
 
     def flush(self) -> str:
         """Finalizza il testo corrente. Restituisce il testo completo della turnazione."""
         result = self.rec.get_result(self._stream)
-        if result and getattr(result, "text", ""):
-            self._text += result.text
+        self._text = self._result_text(result) or self._text
         # Ricrea lo stream per la prossima utterance
         self._stream = self.rec.create_stream()
         self._stream.set_option("language", self.language)
         return self._text
+
+    @staticmethod
+    def _result_text(result) -> str:
+        """Normalizza il risultato sherpa in una stringa."""
+        if isinstance(result, str):
+            return result
+        return str(getattr(result, "text", "") or "")
 
     def reset(self) -> None:
         """Pulisce stato e testo, ricrea uno stream pulito con la lingua corrente."""

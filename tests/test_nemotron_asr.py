@@ -168,6 +168,17 @@ class TestResetCreatesCleanStream:
             result = asr.flush()
             assert isinstance(result, str)
 
+    def test_string_result_is_returned(self, tmp_path):
+        """sherpa restituisce una stringa cumulativa, non result.text."""
+        mock_sherpa = _make_mock_sherpa_module()
+        model_dir = _create_model_dir(tmp_path)
+        recognizer = mock_sherpa.OnlineRecognizer.from_transducer.return_value
+        recognizer.get_result.return_value = "ciao mondo"
+        with patch.dict(sys.modules, {"sherpa_onnx": mock_sherpa}):
+            from voicemem.utils.audio.asr import NemotronStreamingASR
+            asr = NemotronStreamingASR(model_dir, language="it")
+            assert asr.feed(np.zeros(16000, dtype=np.float32)) == "ciao mondo"
+
 
 # ═══════════════════ Stream language option ═══════════════════
 
