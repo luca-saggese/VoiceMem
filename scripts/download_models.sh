@@ -37,21 +37,35 @@ for arg in "$@"; do
 done
 
 REPO="${VOICEMEM_MODELS_REPO:-zhifeixie/VoiceMem_Default_Models_Env}"
+NEMOTRON_DIR="sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-560ms-int8-2026-06-11"
+NEMOTRON_URL="${VOICEMEM_NEMOTRON_URL:-https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/${NEMOTRON_DIR}.tar.bz2}"
 # Nota: nel nome del repository c'è scritto Qwen25_omni, ma il contenuto è l'adapter di risposta per Qwen3.6-35B.
 ADAPTER_REPO="${VOICEMEM_REPLY_ADAPTER_REPO:-${VOICEMEM_SLM_REPO:-zhifeixie/VoiceMem_SLM_Qwen25_omni}}"
 mkdir -p "${DEST}"
+# Rimuove eventuali ASR legacy lasciati da un download precedente.
+rm -rf "${DEST}/asr/funasr-paraformer-zh-streaming" \
+  "${DEST}/asr/paraformer-zh-streaming" \
+  "${DEST}/asr/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20"
 
 if [ "${VOICEMEM_FROM_UPSTREAM:-0}" != "1" ]; then
-  echo "[1/2] Scarico tutti i modelli locali da ${REPO} …"
+  echo "[1/2] Scarico i modelli locali non-ASR da ${REPO} …"
   python3 - "${REPO}" "${DEST}" <<'PY'
 import sys
 from huggingface_hub import snapshot_download
-snapshot_download(repo_id=sys.argv[1], local_dir=sys.argv[2])   # ripresa da interruzione, esecuzione ripetuta non riscarica
+snapshot_download(
+    repo_id=sys.argv[1],
+    local_dir=sys.argv[2],
+    ignore_patterns=["asr/**", "**/funasr*", "**/paraformer*", "**/zipformer*"],
+)   # ripresa da interruzione, esecuzione ripetuta non riscarica
 PY
+  mkdir -p "${DEST}/asr"
+  if [ ! -f "${DEST}/asr/${NEMOTRON_DIR}/encoder.int8.onnx" ]; then
+    echo "      Fonte ufficiale: Nemotron 3.5 ASR Streaming 0.6B EN/IT …"
+    curl --fail --location --retry 3 "${NEMOTRON_URL}" | tar xj -C "${DEST}/asr"
+  fi
 else
   # Scarica uno per uno da varie fonti ufficiali pubbliche (quando HF è inaccessibile, o si vogliono verificare origini e licenze)
   REL="https://github.com/k2-fsa/sherpa-onnx/releases/download"
-  NEMOTRON_DIR="sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-560ms-int8-2026-06-11"
   mkdir -p "${DEST}"/{vad,asr,speaker,embedding,scene,emotion}
 
   echo "[1/3] Fonte ufficiale: VAD silero (MIT)…"
