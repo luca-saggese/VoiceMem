@@ -1,18 +1,104 @@
 """语音转文字：流式识别（实时 partial）+ 非流式精转写（最终文本）。
 
-流式两个实现，接口一致（``feed(samples) -> 累积文本`` / ``flush()`` / ``reset()``），
-由 ``utils/defaults.py`` 的 ``asr`` 工厂按 ``VOICEMEM_ASR`` 选：
+流式三个实现，接口一致（``feed(samples) -> 累积文本`` / ``flush()`` / ``reset()``），
+由 ``utils/defaults.py`` 的 ``asr`` 工厂选择：
 
-  · ``FunASRStreamingASR``  FunASR paraformer-zh-streaming（**默认**，中文更准）
-  · ``StreamingASR``        sherpa-onnx 流式 zipformer（中英双语、纯 onnx 无 torch）
+  · ``NemotronStreamingASR``  Nemotron 3.5 ASR Streaming 0.6B (EN/IT, **默认**)
+  · ``FunASRStreamingASR``    FunASR paraformer-zh-streaming (legacy, cinese)
+  · ``StreamingASR``          sherpa-onnx 流式 zipformer (legacy, zh-en bilingual)
 """
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import numpy as np
 
 SAMPLE_RATE = 16000
+
+# ── Nemotron 3.5 ASR Streaming 0.6B (EN/IT) ────────────────────────────────────
+
+class NemotronStreamingASR:
+    """sherpa-onnx streaming recognizer per Nemotron 3.5 ASR (EN/IT multilingual).
+
+    Contratto: ``feed(samples) -> str``, ``flush() -> str``, ``reset() -> None``.
+
+    La lingua viene applicata ad ogni nuovo stream dopo reset/flush.
+    Il recognizer viene costruito una sola volta; lo ``OnlineStream`` viene ricreato
+    ad ogni ``reset()``/``flush()``.
+
+    Lingue ammesse: ``("it", "en")``.
+    File modello attesi nella directory del modello:
+
+        encoder.int8.onnx
+        decoder.int8.onnx
+        joiner.int8.onnx
+        tokens.txt
+    """
+
+    SUPPORTED_LANGUAGES = ("it", "en")
+
+    def __init__(self, model_dir: str | Path, language: str = "it") -> None:
+        if language not in self.SUPPORTED_LANGUAGES:
+            raise ValueError(
+                f"Lingua non supportata: {language!r}. "
+                f"Lingue ammesse: {', '.join(self.SUPPORTED_LANGUAGES)}"
+            )
+        model_dir = Path(model_dir)
+        # Validazione esplicita dei file modello prima di creare il recognizer
+        for fname in ("encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"):
+            fpath = model_dir / fname
+            if not fpath.exists():
+                raise FileNotFoundError(
+                    f"File modello mancante: {fpath}\n"
+                    f"Nemotron richiede: encoder.int8.onnx, decoder.int8.onnx, "
+                    f"joiner.int8.onnx, tokens.txt"
+                )
+        self.language = language
+        import sherpa_onnx
+        self.rec = sherpa_onnx.OnlineRecognizer.from_transducer(
+            tokens=str(model_dir / "tokens.txt"),
+            encoder=str(model_dir / "encoder.int8.onnx"),
+            decoder=str(model_dir / "decoder.int8.onnx"),
+            joiner=str(model_dir / "joiner.int8.onnx"),
+            num_threads=4,
+            sample_rate=SAMPLE_RATE,
+            feature_dim=80,
+            decoding_method="greedy_search",
+            provider="cpu",
+        )
+        self._stream = self.rec.create_stream()
+        self._text = ""
+
+    def feed(self, samples) -> str:
+        """Incollona campioni audio (float32 @ 16kHz). Restituisce testo parziale."""
+        self._stream.set_option("language", self.language)
+        self._stream.accept_waveform(SAMPLE_RATE, np.asarray(samples, dtype=np.float32))
+        while self.rec.is_ready(self._stream):
+            self.rec.decode_stream(self._stream)
+        result = self.rec.get_result(self._stream)
+        if result and getattr(result, "text", ""):
+            self._text += result.text
+        return self._text
+
+    def flush(self) -> str:
+        """Finalizza il testo corrente. Restituisce il testo completo della turnazione."""
+        result = self.rec.get_result(self._stream)
+        if result and getattr(result, "text", ""):
+            self._text += result.text
+        # Ricrea lo stream per la prossima utterance
+        self._stream = self.rec.create_stream()
+        self._stream.set_option("language", self.language)
+        return self._text
+
+    def reset(self) -> None:
+        """Pulisce stato e testo, ricrea uno stream pulito con la lingua corrente."""
+        self._text = ""
+        self._stream = self.rec.create_stream()
+        self._stream.set_option("language", self.language)
+
+
+# ── Legacy ASR implementations (da eliminare in STEP 6) ────────────────────────
 
 SENSEVOICE_EMOTION_MAP = {
     "NEUTRAL": "中性",

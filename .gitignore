@@ -10,6 +10,7 @@ tests/*
 !tests/test_offline_engine.py
 !tests/test_streaming.py
 !tests/test_demo_from_zero.py
+!tests/test_nemotron_asr.py
 
 # Dati runtime: database memoria, risultati valutazione, archivio registrazioni
 results/
