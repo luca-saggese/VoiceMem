@@ -1,8 +1,8 @@
-"""右脑 SQLite 存储层。
+"""Livello di storage SQLite del cervello destro.
 
-表：
-  right_brain_memories     — 三类经验记忆
-  right_brain_anchor_links — 记忆挂左脑 anchor 的关联
+Tabelle:
+  right_brain_memories     — Tre classi di memoria esperienziale
+  right_brain_anchor_links — Associazioni tra memoria e anchor del cervello sinistro
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def _new_id() -> str:
 
 
 class RightBrainStore:
-    """SQLite 右脑存储。线程安全：每次操作新建连接。"""
+    """Storage SQLite del cervello destro. Thread-safe: crea una nuova connessione per ogni operazione."""
 
     def __init__(self, db_path: Path | str) -> None:
         self._path = Path(db_path)
@@ -77,7 +77,7 @@ class RightBrainStore:
             CREATE INDEX IF NOT EXISTS idx_rbal_anchor ON right_brain_anchor_links(user_id, anchor_type, anchor_id);
             """)
 
-    # ── Write ─────────────────────────────────────────────────────────────────
+    # ── Scrittura ─────────────────────────────────────────────────────────────────
 
     def upsert_memory(
         self,
@@ -95,9 +95,9 @@ class RightBrainStore:
         memory_id: str | None = None,
         created_at: str | None = None,
     ) -> RightBrainMemory:
-        """created_at：事件真实发生时间（ISO，通常来自 Ingest 的 observed_at）。
-        不传则用写入墙钟——但 benchmark/回填场景下墙钟和事件时间相差数年，渲染出的
-        "[2026-08-14]" 会把 temporal 类问题带偏，所以调用方有 observed_at 时应传入。"""
+        """created_at: tempo reale dell'evento (ISO, solitamente da observed_at di Ingest).
+        Se non passato usa il wall clock di scrittura — ma in scenari benchmark/backfill il wall clock e il tempo evento possono differire di anni, e la data renderizzata
+        "[2026-08-14]" fuorcherebbe le domande di tipo temporale, quindi quando il chiamante ha observed_at dovrebbe passarlo."""
         now = _utc_iso()
         mid = memory_id or _new_id()
         created = created_at or now
@@ -153,7 +153,7 @@ class RightBrainStore:
                  anchor.role, anchor.weight, anchor.confidence, now),
             )
 
-    # ── Read ──────────────────────────────────────────────────────────────────
+    # ── Lettura ──────────────────────────────────────────────────────────────────
 
     def search_by_anchors(
         self,
@@ -163,11 +163,11 @@ class RightBrainStore:
         memory_class: MemoryClass | None = None,
         limit: int = 5,
     ) -> list[RightBrainMemory]:
-        """按 anchor 集合检索，按 weight*confidence*priority 降序。"""
+        """Retrieval per insieme di anchor, ordinato decrescente per weight*confidence*priority."""
         if not anchors:
             return self._fallback_global(user_id, memory_class=memory_class, limit=limit)
 
-        # 构造 OR 条件：anchor_type+anchor_id 任意一条命中即可
+        # Costruisci condizione OR: basta che una tra anchor_type+anchor_id corrisponda
         conditions: list[str] = []
         params: list[Any] = [user_id]
         for a in anchors:
@@ -184,8 +184,8 @@ class RightBrainStore:
             params.append(memory_class)
         params.append(limit)
 
-        # 权重 = SUM(matched anchor weight*confidence) * memory.priority
-        # 用 SUM 而非 MAX：同时命中 emotion+entity 的记录得分更高
+        # Peso = SUM(anchor matched weight*confidence) * memory.priority
+        # Usa SUM invece di MAX: i record che corrispondono sia emotion che entity ottengono punteggio più alto
         sql = f"""
             SELECT m.*, SUM(l.weight * l.confidence) AS anchor_score
             FROM right_brain_memories m
@@ -207,7 +207,7 @@ class RightBrainStore:
         anchor_types: list[AnchorType] | None = None,
         limit: int = 3,
     ) -> list[RightBrainMemory]:
-        """查全局 anchor（user_self / global_style）。"""
+        """Cerca anchor globali (user_self / global_style)."""
         global_types = anchor_types or ["user", "global_style"]
         ph = ",".join("?" * len(global_types))
         mc_where = "AND m.memory_class=?" if memory_class else ""
@@ -260,10 +260,10 @@ class RightBrainStore:
             )
 
     def merge_metadata(self, memory_id: str, updates: dict[str, Any]) -> None:
-        """把 updates 合并进 metadata JSON（浅合并，同 key 覆盖）。
+        """Fonde gli updates nel metadata JSON (fusione superficiale, stessa chiave sovrascrive).
 
-        用途：给已存在的记忆打标（superseded_by / refined 等），不改 content、
-        不动 updated_at——打标不是内容更新，不该影响按 updated_at 的排序。
+        Scopo: etichettare memorie esistenti (superseded_by / refined ecc.), non modifica content,
+        non tocca updated_at — etichettare non è un aggiornamento del contenuto, non dovrebbe influenzare l'ordinamento per updated_at."
         """
         with self._conn() as c:
             row = c.execute(
@@ -303,10 +303,10 @@ class RightBrainStore:
     # ── Internal ──────────────────────────────────────────────────────────────
 
     def _row_to_memory(self, row: sqlite3.Row) -> RightBrainMemory:
-        # search_by_anchors/search_global 的 SELECT 里带 anchor_score 列
-        # （本次查询的锚点命中得分）；get_all/get_memory 没有这一列，取 0。
-        # 之前这里直接丢掉了 anchor_score——SQL 里算得再精细，出了存储层
-        # 就只剩静态 priority，最终 top-5 排序完全感知不到检索相关度。
+        # Il SELECT di search_by_anchors/search_global include la colonna anchor_score
+        # (punteggio di matching anchor per questa query); get_all/get_memory non hanno questa colonna, usa 0.
+        # Prima qui si scartava direttamente anchor_score — per quanto preciso il calcolo SQL, uscendo dallo storage layer
+        # rimane solo la priority statica, e l'ordinamento top-5 finale non percepisce affatto la rilevanza del retrieval.
         score = row["anchor_score"] if "anchor_score" in row.keys() else None
         return RightBrainMemory(
             id=row["id"], user_id=row["user_id"],

@@ -1,4 +1,4 @@
-"""Turn 编排：EmotionLayer + 异常轮 fusion + 回复记忆构筑。"""
+"""Orchestrazione Turn: EmotionLayer + fusione turni anomali + costruzione memoria risposta."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def process_user_turn(
     persona_provider: PersonaProvider | None = None,
     fusion_config: FusionConfig | None = None,
 ) -> TurnProcessResult:
-    """统一一轮：VAD → 异常则归因写图 → 构筑回复记忆上下文。"""
+    """Unifica un turno: VAD → se anomalo attribuzione e scrittura grafo → costruisce contesto memoria risposta."""
     emotion_result = emotion_layer.process_user_turn(
         turn_id=turn_id,
         session_id=session_id,
@@ -66,10 +66,10 @@ def process_user_turn(
             or omni_attributor is None
         ):
             raise ValueError(
-                "needs_attribution=True 时需要 left_brain、emotion_store、emotion_graph、omni_attributor"
+                "needs_attribution=True richiede left_brain, emotion_store, emotion_graph, omni_attributor"
             )
         if not audio_path:
-            raise ValueError("needs_attribution=True 时需要 audio_path")
+            raise ValueError("needs_attribution=True richiede audio_path")
 
         fusion_result = run_anomaly_turn(
             asr_text=asr_text,

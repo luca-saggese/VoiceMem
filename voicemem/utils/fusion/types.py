@@ -1,4 +1,4 @@
-"""胼胝体 fusion：双通道检索与 reply prompt 类型。"""
+"""Fusione corpo calloso: retrieval dual-channel e tipi prompt risposta."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ class FusionRetrievalResult:
 
 @dataclass
 class ReplyRetrievalBundle:
-    """回复记忆检索结果（供 build_reply_context_prompt 使用）。"""
+    """Risultati retrieval memoria risposta (per uso build_reply_context_prompt)."""
 
     retrieval: FusionRetrievalResult
     graph_emotion_context: str = ""
@@ -43,7 +43,7 @@ class ReplyRetrievalBundle:
 
 @dataclass
 class ReplyContextPrompt:
-    """分区 reply 上下文：语义区 + 情绪区 + Persona 占位等。"""
+    """Contesto risposta per分区: blocco semantico + blocco emotivo + placeholder Persona ecc."""
 
     semantic_block: str
     emotional_block: str
@@ -58,7 +58,7 @@ class ReplyContextPrompt:
 
 @dataclass
 class ReplyContextBundle:
-    """检索 + 拼装后的回复记忆。"""
+    """Memoria risposta post-retrieval + assemblaggio."""
 
     retrieval: ReplyRetrievalBundle
     prompt: ReplyContextPrompt
@@ -67,7 +67,7 @@ class ReplyContextBundle:
 @dataclass
 class AnomalyTurnResult:
     retrieval: FusionRetrievalResult
-    #: 归因前 reply 上下文（供 Omni）；最终回复用 ``TurnProcessResult.reply_context``。
+    #: Contesto reply prima dell'attribuzione (per Omni); risposta finale usa ``TurnProcessResult.reply_context``.
     reply_prompt: ReplyContextPrompt
     attribution: EmotionAttribution
     pre_attribution_reply: ReplyContextPrompt | None = None

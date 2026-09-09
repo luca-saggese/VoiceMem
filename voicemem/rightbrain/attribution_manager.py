@@ -1,10 +1,9 @@
-"""右脑归因批处理：短期归因（entity.description，每3轮）+ 长期归因（slot.description，session边界）。
+"""Batch processing di attribuzione del cervello destro: attribuzione a breve termine (entity.description, ogni 3 turni) + attribuzione a lungo termine (slot.description, ai confini di sessione).
 
-短期：某个entity这几轮新关联了哪些memory，综合这些memory内容，更新这个entity的
-description，同时顺手把memory item本身也精炼一下（去掉冗余，保留核心）。
+Breve termine: quali memory si sono associate a una certa entity in questi turni, sintetizza il contenuto di queste memory per aggiornare la description di questa entity, e nel frattempo raffina anche l'item memory stesso (rimuovi ridondanze, mantieni il nucleo).
 
-长期：session结束时，看这个slot下所有entity（含它们的description），
-综合出一个更上位的slot描述——类似"这方面呈现出的人格画像"。
+Lungo termine: alla fine della sessione, guarda tutte le entity sotto questo slot (incluse le loro description),
+sintetizza una description di livello superiore dello slot — simile a "un ritratto di personalità che emerge da questo aspetto".
 """
 
 from __future__ import annotations

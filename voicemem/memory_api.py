@@ -54,17 +54,17 @@ def build_memory_context(result: Any, max_rb: int = 3) -> str:
     if hits:
         lines.append("MEMORY CONTEXT (things you remember about the user):")
         for hit in hits:
-            # 带上事件日期（跟右脑 heartnote 的 [YYYY-MM-DD] 前缀同一个格式）：
-            # 事实正文里多是"上周""一个多月了"这种相对说法，没有绝对日期，
-            # "这事在那事之前吗"就无从判断。
+            # Aggiungi la data dell'evento (stesso formato del prefisso [YYYY-MM-DD] dei heartnote del cervello destro):
+            # i testi dei fatti contengono spesso espressioni relative come "la settimana scorsa", "da oltre un mese" senza date assolute,
+            # quindi "questo evento è prima di quell'altro?" sarebbe impossibile da determinare.
             when = getattr(hit, "observed_at", "") or ""
             lines.append(f"- [{when}] {hit.text}" if when else f"- {hit.text}")
     rb_hits = getattr(result, "rb_hits", None) or []
     if rb_hits:
-        # 右脑内容必须跟事实分开标注。它是画像/情绪归因/回复经验——写给模型看的
-        # 内部笔记（"⚠ 避免重复：…（下次：…）""应对方式：…"），不是能对用户讲的话。
-        # 不标注就只是跟在事实后面的几行文本，模型会照着念，回复立刻变成
-        # "你的应对方式是通过健身缓解压力"这种听起来像读档案的句子。
+        # I contenuti del cervello destro devono essere marcati separatamente dai fatti. Sono profili / attribuzione emotiva / esperienza di risposta — note interne scritte per il modello
+        # ("⚠ Evita ripetizioni: …(prossima volta:…)""Modalità di coping:…"), non cose da dire all'utente.
+        # Se non marcati sono solo poche righe di testo dopo i fatti, il modello le leggerà e la risposta diventerà subito
+        # frasi come "Il tuo modo di affrontare è fare esercizio per alleviare lo stress" che suonano come se stesse leggendo un fascicolo.
         lines.append("")
         lines.append("HOW TO SPEAK TO THIS USER (internal — never quote or paraphrase aloud):")
         lines.extend(f"- {h.content}" for h in rb_hits[:max_rb])

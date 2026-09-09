@@ -6,7 +6,7 @@
 <title>VoiceMem</title>
 <style>
 /* ══════════════════════════════════════════════════════════════════════
-   VoiceMem —— 黑灰（ChatGPT 对齐）。左脑蓝 / 右脑粉是仅有的两个彩色。
+   VoiceMem —— nero/grigio (allineamento ChatGPT). Blu cervello sinistro / rosa cervello destro sono gli unici due colori.
    ══════════════════════════════════════════════════════════════════════ */
 :root{
   --bg:#212121; --bg-side:#181818; --bg-panel:#1c1c1c; --bg-input:#2b2b2b;
@@ -31,8 +31,8 @@ button{cursor:pointer;background:none;border:none}
 ::-webkit-scrollbar-track{background:transparent}
 :focus-visible{outline:2px solid #8ab4f8;outline-offset:2px;border-radius:6px}
 
-/* 收起侧栏时中列宽度不变、脑图按高度定尺寸 —— 整屏只是横向平移，不重排。
-   窗口真放不下时才让两列压到 minmax 的下限。 */
+/* Quando la sidebar è collassata, la colonna centrale mantiene la larghezza e la mappa cerebrale si dimensiona in altezza — lo schermo intero si sposta solo orizzontalmente, senza riordinamento.
+   Solo quando la finestra non riesce proprio a contenere, le due colonne scendono al minimo di minmax. */
 #app{
   position:fixed;inset:0;display:grid;
   grid-template-columns:264px minmax(340px,420px) minmax(380px,1fr);
@@ -40,7 +40,7 @@ button{cursor:pointer;background:none;border:none}
 }
 #app.collapsed{grid-template-columns:56px minmax(340px,420px) minmax(380px,1fr)}
 
-/* ── 侧栏 ─────────────────────────────────────────────────────────── */
+/* ── Sidebar ─────────────────────────────────────────────────────────── */
 .sidebar{display:flex;flex-direction:column;min-width:0;background:var(--bg-side);
   border-right:1px solid var(--line)}
 #app.collapsed .sidebar{background:transparent;border-right:none}
@@ -80,7 +80,7 @@ button{cursor:pointer;background:none;border:none}
 .side-foot{padding:10px 14px;border-top:1px solid var(--line);font-size:11.5px;
   letter-spacing:.14em;color:var(--txt-3)}
 
-/* ── 中列 ─────────────────────────────────────────────────────────── */
+/* ── Colonna centrale ─────────────────────────────────────────────────────────── */
 .center{display:flex;flex-direction:column;gap:10px;min-width:0;min-height:0;padding:14px}
 #orb{display:block;flex:0 1 26%;height:26%;min-height:0;width:auto;aspect-ratio:1/1;
   margin:0 auto;opacity:.75;pointer-events:none;border-radius:50%}
@@ -153,7 +153,7 @@ button{cursor:pointer;background:none;border:none}
 .btn[disabled]{opacity:.35;cursor:default}
 .btn[disabled]:hover{background:none}
 
-/* ── 右列 ─────────────────────────────────────────────────────────── */
+/* ── Colonna destra ─────────────────────────────────────────────────────────── */
 .rightpane{display:flex;flex-direction:column;min-width:0;min-height:0;border-left:1px solid var(--line)}
 .topbar{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:11px 14px;
   border-bottom:1px solid var(--line)}
@@ -219,7 +219,7 @@ button{cursor:pointer;background:none;border:none}
   max-height:112px;overflow:auto;word-break:break-word;white-space:pre-wrap}
 #card .ft{font-size:10px;color:var(--txt-3);border-top:1px solid var(--line);padding-top:7px}
 
-/* ── 弹窗 / toast ─────────────────────────────────────────────────── */
+/* ── Modale / toast ─────────────────────────────────────────────────── */
 .mask{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);display:none;
   align-items:center;justify-content:center;padding:20px}
 .mask.on{display:flex}
@@ -238,8 +238,8 @@ button{cursor:pointer;background:none;border:none}
 .pick .sub{font-size:12px;color:var(--txt-3);margin-top:2px;line-height:1.5;display:block}
 .pick button.newopt{border-style:dashed;color:var(--txt-2)}
 .pick button.newopt .nm{color:var(--txt-2)}
-/* 新对话弹窗里的「建一个新空间」。以前默认 display:none、又没有任何代码给它
-   加 .on，等于永远看不见——建空间的入口就这么消失了。默认显示出来。 */
+/* Il pulsante "Crea un nuovo spazio" nella modale nuova conversazione. Prima aveva display:none di default e nessun codice aggiungeva
+   .on, quindi era invisibile per sempre — l'ingresso per creare spazi è scomparso così. Mostrato di default. */
 .newspace{display:flex;gap:8px;margin:-8px 0 18px}
 .newspace.off{display:none}
 .newspace input{flex:1;min-width:0;padding:8px 11px;border-radius:9px;border:1px solid var(--line);

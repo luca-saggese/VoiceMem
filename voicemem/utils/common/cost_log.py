@@ -1,8 +1,8 @@
-"""轻量级 token 用量记录，供评测脚本核算真实花费用。
+"""Registrazione leggera dell'uso token, per gli script di valutazione calcolare il costo reale.
 
-通过环境变量配置：
-  COST_LOG_PATH — 写到哪个 jsonl 文件（不设就不记录，生产环境零开销）
-  COST_TAG      — 这次跑批的标签（比如 "locomo-final"），方便汇总时分组
+Configurato tramite variabili d'ambiente:
+  COST_LOG_PATH — in quale file jsonl scrivere (se non impostato non registra, zero overhead in produzione)
+  COST_TAG      — tag di questa esecuzione batch (es. "locomo-final"), utile per raggruppare durante l'aggregazione
 """
 from __future__ import annotations
 

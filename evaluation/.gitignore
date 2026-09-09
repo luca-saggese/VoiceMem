@@ -1,6 +1,6 @@
-# 数据集和跑出来的结果都不进仓库（体积大，且各人数据版本不同）
+# I dataset e i risultati generati non entrano nel repository (sono grandi e le versioni dei dati variano per persona)
 data/
 results/
 
-# 编译产物
+# Artefatti di build
 __pycache__/

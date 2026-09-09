@@ -1,24 +1,24 @@
-"""右脑 v2：一个节点 = 一条关于这个人的判断，证据挂在下面。
+"""Cervello destro v2: un nodo = un giudizio su questa persona, con evidenze appese sotto.
 
-    rb_traits                          节点
-      claim      压力大时想被安抚        写入时就定好，5-15 字
-      slot       五选一（情绪/应对方式/表达风格/思维模式/喜好与厌恶）
-      embedding  claim 的向量 —— 右脑终于能按语义检索
-    rb_evidence                        证据
-      quote      你先别给方案，让我说完   用户原话
-      emotion    烦躁                  情绪是证据的属性，不是节点
-      cause_id   ← 左脑那条 fact
+    rb_traits                          Nodi
+      claim      Quando è sotto stress vuole essere rassicurato  Fissato alla scrittura, 5-15 caratteri
+      slot       Uno su cinque (emozione/modalità di coping/stile espressivo/modello mentale/preferenze e avversioni)
+      embedding  Vettore del claim — il cervello destro finalmente può fare retrieval semantico
+    rb_evidence                        Evidenze
+      quote      Non darmi soluzioni ora, lascia che finisca   Parola originale dell'utente
+      emotion    Irritato                  L'emozione è un attributo dell'evidenza, non del nodo
+      cause_id   ← quella fact del cervello sinistro
 
-**为什么要换掉 slot → entity → heartnote 那套**：``entity`` 那一层身兼三职——
-有时是关于人的判断（"讨厌被打断"），有时是话题（"手冲咖啡""NUS"），有时是情绪词
-（"焦虑"）。三种东西混在一层，后果是实测到的这些：
+**Perché sostituire il vecchio slot → entity → heartnote**: il livello ``entity`` svolgeva tre ruoli —
+a volte era un giudizio sulla persona ("odia essere interrotto"), a volte un argomento ("caffè fatto a mano", "NUS"), a volte una parola emotiva
+("ansia"). Tre cose diverse mescolate in un livello, i risultati osservati nei test erano:
 
-  · 所有悲伤的事堆进「悲伤」一个节点（61 条），所有话都链到「佳琪」（52 条）
-  · 标题格式无法统一——三类东西本来就没有统一写法
-  · 描述靠事后的巩固批处理补，跑得少，于是大量节点没描述
+  · Tutte le cose tristi raggruppate in un singolo nodo "tristezza" (61 voci), tutte le conversazioni collegate a "Jiaqi" (52 voci)
+  · Formato del titolo non uniforme — tre tipi di cose non hanno una scrittura unificata
+  · Le descrizioni devono essere integrate con consolidamento batch post-hoc, eseguito raramente, quindi molti nodi senza descrizione
 
-这里只放**关于人的判断**。话题实体归左脑的认知图；情绪降级成证据的属性；
-助手的自我复盘（response_experience）不进这张表。
+Qui vengono messi solo **giudizi sulla persona**. Le entità tematiche tornano al cognitive graph del cervello sinistro; le emozioni sono degradate ad attributi delle evidenze.
+Le auto-riflessioni dell'assistant (response_experience) non entrano in questa tabella.
 """
 from __future__ import annotations
 
@@ -31,23 +31,23 @@ from typing import Any
 
 import numpy as np
 
-#: 两条 claim 像到这个程度就算同一条，证据并进去。
-#: 0.95 是实测出来的分界：本地 E5 对中文短语的基线相似度就有 0.9+，
-#: 「喜欢手冲咖啡」↔「偏好手冲咖啡」是 0.964（该合并），
-#: 「讨厌吃饭吧唧嘴」↔「讨厌被打断」是 0.934（不该合并）。
+#: Due claim sono simili abbastanza da essere considerati lo stesso a questo livello, le evidenze vengono fuse dentro.
+#: 0.95 è la soglia osservata nei test: la similarità baseline di E5 locale per frasi cinesi è già 0.9+,
+#: "ama il caffè fatto a mano" ↔ "preferisce il caffè fatto a mano" è 0.964 (dovrebbe essere fuso),
+#: "odia quando mangia rumorosamente" ↔ "odia essere interrotto" è 0.934 (non dovrebbe essere fuso).
 MERGE_THRESHOLD = 0.95
 
-#: 五个 slot。去掉了原来的「人物地点态度」——它存的是话题（手冲咖啡/NUS/佳琪），
-#: 本来就该在左脑，也正是「佳琪 ×52」那个大杂烩的来源。
-SLOTS = ("情绪", "应对方式", "表达风格", "思维模式", "喜好与厌恶")
+#: Cinque slot. Rimossi i vecchi "persona/luogo/atteggiamento" — quello memorizzava argomenti (caffè fatto a mano/NUS/Jiaqi),
+#: che dovrebbero appartenere al cervello sinistro, ed era proprio la fonte del miscuglio "Jiaqi ×52".
+SLOTS = ("Emozione", "Modalità di coping", "Stile espressivo", "Modello mentale", "Preferenze e avversioni")
 
-#: 五个 slot → UI 的三类
+#: Cinque slot → tre cluster UI
 SLOT_TO_CLUSTER = {
-    "情绪":       "emotion",
-    "应对方式":    "personality",
-    "表达风格":    "personality",
-    "思维模式":    "personality",
-    "喜好与厌恶":  "preference",
+    "Emozione":       "emotion",
+    "Modalità di coping":    "personality",
+    "Stile espressivo":    "personality",
+    "Modello mentale":    "personality",
+    "Preferenze e avversioni":  "preference",
 }
 
 
@@ -55,7 +55,7 @@ SLOT_TO_CLUSTER = {
 class Evidence:
     quote: str
     emotion: str = ""
-    cause: str = ""            # 左脑 fact 的原文（渲染时当"为什么"）
+    cause: str = ""            # Testo originale della fact del cervello sinistro (usato come "perché" durante il rendering)
     cause_id: str = ""
     at: str = ""
 
@@ -74,25 +74,25 @@ class Trait:
         return SLOT_TO_CLUSTER.get(self.slot, "personality")
 
 
-#: claim 前面常见的主语。节点标题是「讨厌被打断」而不是「用户讨厌被打断」——
-#: 整张图讲的都是同一个人，每个标题都顶着「用户」两个字纯属噪音。
-_SUBJECTS = ("用户可能", "用户似乎", "用户倾向于", "用户", "他/她", "对方", "我")
+#: Soggetti comuni prima di un claim. Il titolo del nodo è "odia essere interrotto" invece di "l'utente odia essere interrotto" —
+#: l'intero grafo parla della stessa persona, avere "utente" davanti a ogni titolo è solo rumore.
+_SUBJECTS = ("L'utente potrebbe", "L'utente sembra", "L'utente tende a", "L'utente", "Lui/lei", "L'altra parte", "Io")
 
 
 def normalize_claim(claim: str) -> str:
-    """把 claim 收拾成节点标题该有的样子：无主语、无句号、一句短话。
+    """Riformatta il claim in ciò che dovrebbe essere un titolo di nodo: senza soggetto, senza punto finale, una breve frase.
 
-    几条写入路径的产出质量不一样——合并抽取那条有明确格式要求，助手复盘那条
-    （response_experience 的 user_trait）没有，实测吐出过
-    「用户喜欢分享自己的经历，可能不太关注助手的问候。」这种带主语的整句。
-    与其在每条路径上各写一遍要求，不如在入口统一收口。
+    La qualità del prodotto da diversi percorsi di scrittura varia — quello dell'estrazione combinata ha requisiti di formato espliciti, quello della riflessione dell'assistant
+    (user_trait di response_experience) no, nei test sono stati prodotti output come
+    "L'utente ama condividere le proprie esperienze, probabilmente non presta attenzione ai saluti dell'assistant." con soggetto intero.
+    Invece di scrivere i requisiti su ogni percorso separatamente, è meglio uniformare all'ingresso.
     """
     c = (claim or "").strip().strip("「」\"'").rstrip("。.！!；;，,")
     for s in _SUBJECTS:
         if c.startswith(s) and len(c) > len(s) + 2:
             c = c[len(s):].lstrip("，,、 ")
             break
-    # 「A，可能B」这种双句只留前半句——后半句几乎都是模型加的推测
+    # Frasi doppie tipo "A, forse B" — mantieni solo la prima metà — la seconda è quasi sempre un'ipotesi aggiunta dal modello
     if "，" in c and len(c) > 15:
         head = c.split("，")[0].strip()
         if len(head) >= 5:
@@ -106,7 +106,7 @@ def _now() -> str:
 
 
 class TraitStore:
-    """rb_traits / rb_evidence 两张表，跟其余结构化存储共用 space 那个 sqlite。"""
+    """Tabelle rb_traits / rb_evidence, condividono lo stesso sqlite di space con gli altri archivi strutturati."""
 
     def __init__(self, db_path, embed) -> None:
         self._db = str(db_path)
@@ -140,10 +140,10 @@ class TraitStore:
         c.row_factory = sqlite3.Row
         return c
 
-    # ── 写 ────────────────────────────────────────────────────────────────────
+    # ── Scrittura ────────────────────────────────────────────────────────────────────
 
     def add(self, user_id: str, slot: str, claim: str, ev: Evidence) -> str:
-        """加一条判断 + 它的证据。已经有意思相同的 claim 就并进去，不新建节点。"""
+        """Aggiunge un giudizio + le sue evidenze. Se esiste già un claim con significato identico viene fuso dentro, non crea un nuovo nodo."""
         claim = normalize_claim(claim)
         if not claim or slot not in SLOTS:
             return ""
@@ -162,8 +162,8 @@ class TraitStore:
                            0.9, now, now))
             else:
                 c.execute("UPDATE rb_traits SET updated_at=? WHERE id=?", (now, tid))
-            # 每个字段都过一遍 str()：证据常常来自旧数据或 LLM 输出，
-            # 缺字段时是 None，而这几列都是 NOT NULL，直接插会整轮写入失败。
+            # Ogni campo passa attraverso str(): le evidenze spesso provengono da vecchi dati o output LLM,
+            # quando manca un campo è None, e queste colonne sono tutte NOT NULL, l'inserimento diretto causerebbe il fallimento dell'intera scrittura.
             c.execute("INSERT INTO rb_evidence "
                       "(id,trait_id,user_id,quote,emotion,cause,cause_id,created_at) "
                       "VALUES (?,?,?,?,?,?,?,?)",
@@ -197,10 +197,10 @@ class TraitStore:
                 best, best_sim = r["id"], sim
         return best if best_sim >= MERGE_THRESHOLD else None
 
-    # ── 读 ────────────────────────────────────────────────────────────────────
+    # ── Lettura ────────────────────────────────────────────────────────────────────
 
     def all(self, user_id: str, *, per_slot: int = 8) -> list[Trait]:
-        """给脑图用：每个 slot 取证据最多的前几条 + 最近新增的几条。"""
+        """Per la mappa cerebrale: da ogni slot prende le prime voci con più evidenze + quelle aggiunte più recentemente."""
         out: list[Trait] = []
         with self._conn() as c:
             for slot in SLOTS:
@@ -213,7 +213,7 @@ class TraitStore:
                 by_new = sorted(rows, key=lambda r: r["updated_at"], reverse=True)
                 fresh = max(1, per_slot // 2)
                 picked, seen = [], set()
-                # 一半给最近新增的（刚说的那句要能立刻看见），一半给证据最多的
+                # Metà per quelli aggiunti più recentemente (l'ultima frase detta deve essere visibile immediatamente), metà per quelli con più evidenze
                 for r in by_new[:fresh] + by_ev:
                     if r["id"] in seen:
                         continue
@@ -226,19 +226,19 @@ class TraitStore:
         return out
 
     def search(self, user_id: str, query: str, *, top_k: int = 5) -> list[Trait]:
-        """按语义查判断。
+        """Cerca giudizi per similarità semantica.
 
-        原来的右脑只能按情绪锚点匹配，所以每轮返回的总是同样那几条静态画像。
-        claim 有了向量之后这里才是真正的检索。
+        Il vecchio cervello destro poteva solo corrispondere per anchor emotivo, quindi ogni turno restituiva sempre le stesse poche statiche descrizioni.
+        Ora che il claim ha un vettore, qui è vero retrieval."
         """
         return [t for t, _ in self.search_scored(user_id, query, top_k=top_k)]
 
     def search_scored(self, user_id: str, query: str, *, top_k: int = 5
                       ) -> list[tuple[Trait, float]]:
-        """同 :meth:`search`，但带上余弦相似度。
+        """Come :meth:`search`, ma include la similarità coseno.
 
-        检索侧要用它当 priority——判断跟这句话有多相关，直接决定它该不该占
-        top-N 的位置，固定 priority 会让不相关的判断挤掉真正相关的。
+        Il lato retrieval lo usa come priority — quanto un giudizio è rilevante per questa frase determina direttamente se dovrebbe occupare una posizione
+        top-N; una priority fissa farebbe sì che giudizi irrilevanti spingano via quelli veramente rilevanti."
         """
         q = self._vec(query)
         if q is None:

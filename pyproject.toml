@@ -19,53 +19,53 @@ classifiers = [
     "Topic :: Multimedia :: Sound/Audio :: Speech",
 ]
 
-# `pip install voicemem` 一条命令装齐所有内置组件：ASR、VAD、声纹、场景、情绪、
-# 本地 embedding，外加 web demo 和 examples/ 的运行依赖。
+# `pip install voicemem` installa tutti i componenti built-in con un solo comando: ASR, VAD, voiceprint, scena, emozione,
+# embedding locale, più le dipendenze per eseguire il web demo e examples/.
 #
-# 之前把这些拆在 [slm] extra 里，用户按 README 装完基础包仍然
-# ModuleNotFoundError: funasr —— 名字叫 slm，没人想得到 ASR 在里面。
+# In precedenza erano separati nell'extra [slm], dopo che l'utente installava il pacchetto base secondo il README ancora
+# ModuleNotFoundError: funasr —— si chiama slm, nessuno si aspetterebbe che l'ASR sia lì dentro.
 dependencies = [
     "numpy",
     "openai",
     "mem0ai",
-    # ── 音频链路 ──
+    # ── audio chain ──
     "torch",
-    "torchaudio",         # funasr 内部 import 它，但自己没声明
-    "torchvision",        # transformers 加载 Qwen2.5-Omni 要 Qwen2VLVideoProcessor，
-                          # 它 import torchvision。缺了不报错，只是情绪归因器**静默**
-                          # 退回纯声学象限——"我喜欢草莓"会判成悲伤，右脑整个不准。
+    "torchaudio",         # funasr lo importa internamente ma non lo dichiara da sé
+    "torchvision",        # transformers per caricare Qwen2.5-Omni richiede Qwen2VLVideoProcessor,
+                          # che importa torchvision. Se manca non dà errore, solo il attributore di emozione**silenziosamente**
+                          # fa fallback al quadrante puramente acustico — "mi piacciono le fragole" verrebbe classificato come tristezza, tutto il cervello destro non funziona.
     "transformers==4.52.3",
-    "accelerate",         # 情绪归因 from_pretrained(device_map="auto") 要它，
-                          # 缺了同样是静默退化，不是报错。
-    "funasr",             # 流式 ASR（默认）
-    "modelscope",         # funasr 取模型用
-    "sherpa-onnx",        # VAD + 声纹 + 回退 ASR（纯 onnx）
-    "sentence-transformers",   # 本地 E5（记忆向量 / slot 分类）
-    "soundfile",          # 读 mp3/m4a/flac；缺了会退回标准库 wave，只认 PCM wav
+    "accelerate",         # serve per from_pretrained(device_map="auto") dell'attributore emotivo,
+                          # se manca è la stessa degradazione silenziosa, non un errore.
+    "funasr",             # ASR streaming (predefinito)
+    "modelscope",         # funasr lo usa per prendere i modelli
+    "sherpa-onnx",        # VAD + voiceprint + ASR di fallback (puro onnx)
+    "sentence-transformers",   # E5 locale (vettori memoria / classificazione slot)
+    "soundfile",          # legge mp3/m4a/flac; se manca fa fallback a wave della libreria standard, riconosce solo PCM wav
     "scipy",
-    # ── web demo（web/run.py）和 examples/ ──
+    # ── web demo (web/run.py) ed examples/ ──
     "fastapi",
     "uvicorn",
-    "pydantic",           # web/utils.py 顶层就 import 了（fastapi 带得进来，但别靠它）
-    "websockets>=14",     # uvicorn 跑 WebSocket；examples/05 接 realtime 也用
-    "sounddevice",        # examples 里的语音 agent：麦克风 + 扬声器
-    "pywebrtc-audio",     # 回声消除（外放时能打断）
+    "pydantic",           # importato al top-level da web/utils.py (fastapi può portarlo, ma non farci affidamento)
+    "websockets>=14",     # uvicorn gestisce WebSocket; anche examples/05 per realtime lo usa
+    "sounddevice",        # agent vocale negli examples: microfono + altoparlante
+    "pywebrtc-audio",     # cancellazione eco (può interrompere quando si usa l'altoparlante)
 ]
 
 [project.optional-dependencies]
-# 跑我们微调的 Qwen 回复模型（Qwen3.6-35B-A3B + QLoRA adapter）。
-# 权重不在 wheel 里，用 `bash scripts/download_models.sh --reply-adapter` 拉。
+# Per eseguire il nostro modello Qwen fine-tuned per le risposte (Qwen3.6-35B-A3B + adapter QLoRA).
+# I pesi non sono nel wheel, usa `bash scripts/download_models.sh --reply-adapter` per scaricarli.
 slm = [
-    "peft",               # 加载 QLoRA adapter
-    "qwen-omni-utils",    # Qwen-Omni 的多模态输入预处理
-    "audioread",          # qwen-omni-utils 顶层就 import 它，但自己没声明；
-                          # 缺了 `import qwen_omni_utils` 直接 ModuleNotFoundError。
+    "peft",               # carica adapter QLoRA
+    "qwen-omni-utils",    # preprocessing multimodale degli input di Qwen-Omni
+    "audioread",          # qwen-omni-utils lo importa al top-level ma non lo dichiara;
+                          # se manca `import qwen_omni_utils` dà direttamente ModuleNotFoundError。
 ]
 
-# 只有这两条命令。其余场景各自 pip，不再单开 extra——名字对不上内容的 extra
-# 正是之前那个坑的成因（[slm] 里装着 ASR，谁也想不到）：
-#   本地 TTS（TTS_BACKEND=local）  pip install piper-tts   或   pip install voxcpm
-#   跑 finetune/ 的训练脚本         pip install ms-swift==4.5.2 bitsandbytes
+# Solo questi due comandi. Per gli altri scenari usa pip separatamente, senza aprire extra separati — un extra con nome che non corrisponde al contenuto
+# è stato proprio la causa del problema precedente ([slm] conteneva ASR, nessuno se l'aspetterebbe):
+#   TTS locale (TTS_BACKEND=local)  pip install piper-tts   oppure   pip install voxcpm
+#   per eseguire gli script di training in finetune/         pip install ms-swift==4.5.2 bitsandbytes
 
 [project.urls]
 Homepage = "https://github.com/lang-jiaqi/Voicemem_open"
@@ -75,13 +75,12 @@ Issues = "https://github.com/lang-jiaqi/Voicemem_open/issues"
 [tool.setuptools.packages.find]
 include = ["voicemem*"]
 
-# data/ 下的 prompt 文本是运行时读的（见 leftbrain/mem0_additive_prompt_build.py），
-# 不显式声明的话 wheel 里不会有，装完一调用就 FileNotFoundError。
+# I testi dei prompt in data/ vengono letti a runtime (vedi leftbrain/mem0_additive_prompt_build.py),
+# se non dichiarati esplicitamente non finiranno nel wheel, e dopo l'installazione un call darà FileNotFoundError.
 [tool.setuptools.package-data]
-# data/ 下的 prompt 文本是运行时读的（见 leftbrain/mem0_additive_prompt_build.py），
-# 不显式声明的话 wheel 里不会有，装完一调用就 FileNotFoundError。
+# I testi dei prompt in data/ vengono letti a runtime (vedi leftbrain/mem0_additive_prompt_build.py),
+# se non dichiarati esplicitamente non finiranno nel wheel, e dopo l'installazione una chiamata darà FileNotFoundError.
 #
-# assets/*.wav 是 README 和 examples 里用的示例音频（一共 1MB）。不打进包的话，
-# pip 装完照 README 跑第一个例子就是 LibsndfileError——那是别人对这个项目的
-# 第一印象。voicemem.sample_audio() 会先找仓库里的 assets/，没有再回落到这份。
+# assets/*.wav sono audio di esempio usati nel README e negli examples (1MB totali). Se non inclusi nel pacchetto,
+# dopo l'installazione con pip il primo esempio del README darà LibsndfileError — è quella che è la prima impressione degli utenti. voicemem.sample_audio() cercherà prima assets/ nel repository, altrimenti farà fallback a questo.
 "*" = ["data/*.txt", "*.txt", "assets/*.wav"]

@@ -1,21 +1,20 @@
-"""把问句里的相对时间词展开成绝对日期，再拿去检索。
+"""Espande le parole temporali relative nelle domande in date assolute, poi le usa per il retrieval.
 
-为什么需要：抽取会把"下周三下午三点体检"归一成"Jiaqi 将在 2026年8月26日（周三）
-下午三点进行体检"——库里存的是绝对日期。而用户问的是"我下周有什么安排"，这句话里
-**一个绝对日期都没有**，向量对不上，实测三条下周日程一条都检索不到::
+Perché serve: l'estrazione raggrupperà "visita medica mercoledì prossimo alle 15:00" in "Jiaqi avrà una visita medica il 26 agosto 2026 (mercoledì) alle 15:00" — nel database sono memorizzate date assolute. Ma l'utente chiede "quali sono i miei impegni della prossima settimana", e questa frase
+**non contiene alcuna data assoluta**, i vettori non corrispondono, nei test reali nessuna delle tre programmazioni della domenica successiva viene recuperata::
 
-    「我下周有什么安排」   日程命中 0/3
-    「8月26号我要干嘛」    日程命中 3/3
+    "Quali sono i miei impegni della prossima settimana"   Hit programmazione 0/3
+    "Cosa devo fare il 26 agosto"    Hit programmazione 3/3
 
-差别只在问法。所以在检索前把"下周"就地展开成那七天的日期，拼在问句后面——
-向量里有了 8月26日 这样的字面，才够得着库里那条。
+La differenza è solo nel modo di formulare. Quindi prima del retrieval espandi "prossima settimana" nelle date di quei sette giorni, aggiungendole dopo la domanda —
+con parole come "26 agosto" presenti nel vettore, si può raggiungere quel record nel database.
 
-只改**拿去检索的那份文本**，不改用户说的话，也不写进记忆。
+Modifica solo **il testo usato per il retrieval**, non le parole dell'utente e non lo scrivi nella memoria.
 
-    expand_relative_dates("我下周有什么安排")
-    → "我下周有什么安排（2026年8月24日 2026年8月25日 … 2026年8月30日）"
+    expand_relative_dates("Quali sono i miei impegni della prossima settimana?")
+    → "Quali sono i miei impegni della prossima settimana? (24 ago 2026 25 ago 2026 … 30 ago 2026)"
 
-识别不到相对时间词就原样返回，一分钱不花（纯正则，无模型）。
+Se non riconosce parole temporali relative, restituisce invariato senza spendere nulla (solo regex, nessun modello).
 """
 from __future__ import annotations
 

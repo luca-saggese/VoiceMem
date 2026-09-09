@@ -1,40 +1,44 @@
 # assets
 
-图片和演示用的音频素材。
+Materiale audio per demo e illustrazioni.
 
 ## input.wav
 
-README 第一个例子（`vm.ingest(audio="input.wav")`）用的就是它。
-内容是「我是素食主义者，对坚果过敏。」，5.8 秒，16 kHz 单声道 PCM16，
-OpenAI TTS 合成。末尾留了 1 秒静音——流式那条路要连续 0.5 秒静音才判「说完了」，
-音频在说完那一刻就结束的话，`turn_over` 永远等不到。
+Utilizzato nel primo esempio del README (`vm.ingest(audio="input.wav")`).
+Contiene il testo "Sono vegetariano, sono allergico alle noci.", durata 5.8 secondi,
+PCM16 mono 16 kHz, sintetizzato con OpenAI TTS. Sono stati lasciati 1 secondo di
+silenzio alla fine — il percorso streaming richiede 0.5 secondi di silenzio continuo
+per capire che l'utente ha finito di parlare, altrimenti `turn_over` non arriverebbe mai se l'audio si interrompe esattamente quando finisce di parlare.
 
 ## question.wav
 
-README 流式那一节喂进 `vm.stream()` 的那段。内容是「我的饮食禁忌是什么？」，
-3.2 秒，16 kHz 单声道 PCM16，macOS `say -v Tingting` 合成。
+L'audio usato nella sezione streaming del README, passato a `vm.stream()`. Contiene
+il testo "Quali sono le mie restrizioni alimentari?", durata 3.2 secondi, PCM16 mono
+16 kHz, sintetizzato con macOS `say -v Tingting`.
 
-**是个问句**——流式那段演示的就是它：记忆在人还没说完时就查好了，而最后那次
-`ingest()` 因为句子里没有关于用户的新事实，会被判成不入库（`facts_count` 0）。
-末尾同样留了 1 秒多静音，`turn_over` 才等得到。
+**È una domanda** — è proprio questo che viene dimostrato nello streaming: la memoria
+viene cercata prima ancora che l'utente abbia finito di parlare, e l'ultima chiamata
+`ingest()` non memorizzerà alcun fatto nuovo (poiché la frase non contiene informazioni
+nuove sull'utente), risultando in `facts_count` 0. Anche qui sono stati lasciati oltre
+1 secondo di silenzio alla fine, affinché `turn_over` possa essere rilevato correttamente.
 
 ## speech.wav
 
-`examples/02_streaming.py` 的默认输入。
-内容是「我喜欢吃马卡龙」，7.7 秒，16 kHz 单声道 PCM16。
+Input predefinito per `examples/02_streaming.py`.
+Contiene il testo "Mi piacciono i macaron", durata 7.7 secondi, PCM16 mono 16 kHz.
 
 ## cafe_song.wav
 
-「在咖啡馆听到的那首歌」—— web demo 里问起时会把这段原声放回来。
+"Quella canzone sentita al caffè" — quando viene chiesta nel web demo, questo audio originale viene riprodotto.
 
-15 秒，16 kHz 单声道 PCM16。由两段素材混成：
+Durata 15 secondi, PCM16 mono 16 kHz. Composto dalla miscela di due fonti:
 
-| 层 | 来源 | 许可 |
+| Strato | Fonte | Licenza |
 |---|---|---|
-| 音乐 | *Chili Pepper* — Fred Longshaw，1927 年爵士钢琴录音（[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Chili_Pepper_by_Fred_Longshaw_(1927,_Jazz_piano).opus)） | 公有领域（1927 年录音） |
-| 环境 | *Restaurant ambience*（[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Restaurant_ambience.ogg)） | 见 Commons 文件页 |
+| Musica | *Chili Pepper* — Fred Longshaw, registrazione jazz di pianoforte del 1927 ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Chili_Pepper_by_Fred_Longshaw_(1927,_Jazz_piano).opus)) | Pubblico dominio (registrazione del 1927) |
+| Ambiente | *Restaurant ambience* ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Restaurant_ambience.ogg)) | Vedi pagina file su Commons |
 
-混音参数（音乐压到背景层，像隔着店里的音响）：
+Parametri di missaggio (la musica viene abbassata a strato di sottofondo, come se provenisse dagli altoparlanti del locale):
 
 ```bash
 ffmpeg -ss 8 -t 15 -i music.opus -stream_loop -1 -t 15 -i amb.ogg \
@@ -44,5 +48,5 @@ dynaudnorm=p=0.7,alimiter=limit=0.95[out]" \
   -map "[out]" -ac 1 -ar 16000 -c:a pcm_s16le cafe_song.wav
 ```
 
-换成自己的录音：直接覆盖这个文件即可（归档表记的是路径），但**建议重跑一次
-ingest** —— `tune:` / `scene:` 标签是从音频算出来的，换了内容标签就对不上了。
+Per usare la tua registrazione: basta sovrascrivere questo file (l'archivio registra il percorso), ma **si consiglia di rieseguire
+ingest** — i tag `tune:` / `scene:` vengono calcolati dall'audio, cambiando contenuto i tag non corrisponderebbero più.

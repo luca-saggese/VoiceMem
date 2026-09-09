@@ -1,28 +1,28 @@
-"""统一配置入口：一个 dict 配齐所有本地/api 模型（仿 mem0 的 from_config 模式）。
+"""Punto di configurazione unificato: un dict per configurare tutti i modelli locali/api (modello from_config ispirato a mem0).
 
-每个组件写成 ``{"provider": ..., "config": {...}}``，打开一个 dict 就知道每个模型
-走本地还是 api。``build_kwargs(config)`` 把这份声明式 dict 解析成现有
-``VoiceMem(**kwargs)`` 能吃的注入参数——它是在现有 ``VoiceMem(embedding=fn, schema=fn,
-…)`` 注入机制**之上**的一层糖，不改任何现有行为。
+Ogni componente è scritto come ``{"provider": ..., "config": {...}}``, aprendo un dict sai se ogni modello
+usa locale o api. ``build_kwargs(config)`` analizza questo dict dichiarativo nei parametri di iniezione che
+``VoiceMem(**kwargs)`` può consumare — è uno strato di zucchero sintattico **sopra** il meccanismo di iniezione esistente
+``VoiceMem(embedding=fn, schema=fn, …)``, non modifica alcun comportamento esistente.
 
-一份完整 config 长这样（每段的 config 都可省，省了就用内置默认）::
+Un config completo è così (la config di ogni sezione è opzionale, se omessa usa i default integrati) ::
 
     CONFIG = {
-        "api_key": "sk-...",              # 顶层，透传给 VoiceMem（也写进 OPENAI_API_KEY）
-        "base_url": None,                 # 顶层，透传给 VoiceMem
-        "mode": "multi_modal",            # 顶层，透传给 VoiceMem
+        "api_key": "sk-...",              # Livello top, passato a VoiceMem (scritto anche in OPENAI_API_KEY)
+        "base_url": None,                 # Livello top, passato a VoiceMem
+        "mode": "multi_modal",            # Livello top, passato a VoiceMem
 
-        "embedding": {"provider": "local"},                 # 记忆向量走本地 E5
-        "slots":     {"provider": "local"},                 # slot 分类走本地 E5（0 LLM）
-        "vad":       {"provider": "silero"},                # 判「说完了」；custom 换自己的
-        "memory_engine": {"provider": "mem0"},              # 向量库后端（默认 mem0）
-        "llm": {"provider": "openai",                       # 左右脑内部 LLM（打标签/归因…）
+        "embedding": {"provider": "local"},                 # Vettori memoria usano E5 locale
+        "slots":     {"provider": "local"},                 # Classificazione slot usa E5 locale (0 LLM)
+        "vad":       {"provider": "silero"},                # Rileva "ha finito di parlare"; custom per sostituire con il proprio
+        "memory_engine": {"provider": "mem0"},              # Backend database vettoriale (default mem0)
+        "llm": {"provider": "openai",                       # LLM interno cervello sinistro/destro (etichettatura/attribution…)
                 "config": {"model": "gpt-4o-mini", "api_key": "sk-...", "base_url": None}},
 
-        # reply 段：回复模型。两种写法都认——
+        # Sezione reply: modello di risposta. Entrambe le forme sono accettate —
         "reply": {"provider": "openai", "config": {"model": "gpt-4o-mini"}},
-        # 或者 demo 那份嵌套写法（web/run.py 用），核心只取其中的 llm 段，
-        # tts / realtime 仍归 web demo 自己读：
+        # oppure la forma annidata del demo (usata da web/run.py), il core prende solo la sezione llm,
+        # tts / realtime restano gestiti dal web demo stesso:
         # "reply": {
         #     "llm":      {"provider": "openai", "config": {"model": "gpt-4o"}},
         #     "tts":      {"provider": "openai", "config": {"model": "gpt-4o-mini-tts"}},
@@ -30,20 +30,20 @@
         # },
     }
 
-provider → 内置实现 的映射（傻瓜清晰，一眼看懂）：
+Mappatura provider → implementazione integrata (semplice da capire a colpo d'occhio):
 
-    embedding.provider     local  -> LocalE5Embedder（本地 E5，0 网络）
-                           openai -> OpenAILocalEmbedder（OpenAI Embeddings API）
-    slots.provider         local  -> LocalQueryClassifier（本地 E5，0 LLM）
-                           openai -> QuerySlotClassifier（单次 LLM）
-    vad.provider           silero -> make_vad（内置，config 可给 model / threshold）
-                           custom -> config.obj 那个对象（要有 is_speech(frame)->bool）
-    memory_engine.provider mem0   -> Mem0BackendStore（默认，也可不传走内置默认）
-    llm.provider           openai -> 落 OPENAI_MODEL / OPENAI_API_KEY / OPENAI_BASE_URL
-    reply.provider         openai -> voicemem.reply.openai_reply（内置，流式）
-                           custom -> config.fn 里那个可调用对象（等价于 VoiceMem(reply=fn)）
+    embedding.provider     local  -> LocalE5Embedder (E5 locale, 0 rete)
+                           openai -> OpenAILocalEmbedder (OpenAI Embeddings API)
+    slots.provider         local  -> LocalQueryClassifier (E5 locale, 0 LLM)
+                           openai -> QuerySlotClassifier (1 chiamata LLM)
+    vad.provider           silero -> make_vad (integrato, config può dare model / threshold)
+                           custom -> l'oggetto config.obj (deve avere is_speech(frame)->bool)
+    memory_engine.provider mem0   -> Mem0BackendStore (default, anche omettendo usa il default integrato)
+    llm.provider           openai -> scrive su OPENAI_MODEL / OPENAI_API_KEY / OPENAI_BASE_URL
+    reply.provider         openai -> voicemem.reply.openai_reply (integrato, streaming)
+                           custom -> l'oggetto callable in config.fn (equivalente a VoiceMem(reply=fn))
 
-不认识的 provider 会报清晰错误。
+Provider non riconosciuti generano un errore chiaro.
 """
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ import os
 
 
 def _split(component: dict | None) -> tuple[str, dict]:
-    """把 ``{"provider": ..., "config": {...}}`` 拆成 (provider, config)；config 可省。"""
+    """Separa ``{"provider": ..., "config": {...}}`` in (provider, config); config è opzionale."""
     component = component or {}
     provider = component.get("provider")
     cfg = component.get("config") or {}
@@ -60,12 +60,12 @@ def _split(component: dict | None) -> tuple[str, dict]:
 
 def _bad(component: str, provider, known) -> None:
     raise ValueError(
-        f"未知的 {component}.provider={provider!r}；可选：{' / '.join(known)}"
+        f"{component}.provider={provider!r} sconosciuto; opzioni: {' / '.join(known)}"
     )
 
 
 def _embedding_factory(provider, cfg):
-    """embedding：local -> LocalE5Embedder；openai -> OpenAILocalEmbedder。"""
+    """embedding: local -> LocalE5Embedder; openai -> OpenAILocalEmbedder."""
     if provider == "local":
         def make():
             from voicemem.leftbrain.local_e5_embedder import LocalE5Embedder
@@ -87,11 +87,11 @@ def _embedding_factory(provider, cfg):
 
 
 def _slots_factory(provider, cfg):
-    """slots：local -> LocalQueryClassifier；openai -> QuerySlotClassifier。"""
+    """slots: local -> LocalQueryClassifier; openai -> QuerySlotClassifier."""
     if provider == "local":
         def make():
             from voicemem.leftbrain.cognitive_graph.local_query_classifier import LocalQueryClassifier
-            # 和本地 embedder 共享一份 E5（省一份内存），除非调用方显式传了 model。
+            # Condivide la stessa istanza E5 con l'embedder locale (risparmia memoria), a meno che il chiamante non passi esplicitamente un model.
             kw = dict(cfg)
             if "model" not in kw:
                 from voicemem.leftbrain.local_e5_embedder import shared_e5
@@ -107,7 +107,7 @@ def _slots_factory(provider, cfg):
 
 
 def _vad_factory(provider, cfg):
-    """vad：silero -> 内置 make_vad（可配 model/threshold）；custom -> config.obj 那个对象。"""
+    """vad: silero -> make_vad integrato (configurabile model/threshold); custom -> l'oggetto config.obj."""
     if provider in (None, "silero"):
         def make():
             from voicemem.utils.audio.stream_io import make_vad
@@ -117,29 +117,29 @@ def _vad_factory(provider, cfg):
         obj = cfg.get("obj")
         if obj is None or not hasattr(obj, "is_speech"):
             raise ValueError(
-                'vad.provider="custom" 需要 config.obj 给一个有 is_speech(frame)->bool '
-                "的对象；直接注入更省事：VoiceMem(vad=lambda: MyVad())"
+                'vad.provider="custom" richiede config.obj con un oggetto che ha is_speech(frame)->bool '
+                "; più semplice iniettare direttamente: VoiceMem(vad=lambda: MyVad())"
             )
         return lambda: obj
     _bad("vad", provider, ["silero", "custom"])
 
 
 def _memory_engine_factory(provider, cfg):
-    """memory_engine：mem0 -> Mem0BackendStore（默认，也可不传走内置默认）。"""
+    """memory_engine: mem0 -> Mem0BackendStore (default, anche omettendo usa il default integrato)."""
     if provider == "mem0":
-        # None → 让 VoiceMem 走内置默认 memory_engine（即 Mem0BackendStore）。
-        # 不需要在这里显式构造：内置默认已经是 mem0，直接不覆盖最省事、语义一致。
+        # None → lascia che VoiceMem usi il memory_engine default integrato (cioè Mem0BackendStore).
+        # Non serve costruirlo esplicitamente qui: il default integrato è già mem0, ometterlo è più semplice e semanticamente coerente.
         return None
     _bad("memory_engine", provider, ["mem0"])
 
 
-# reply 段的 demo 嵌套写法（web/run.py 的 CONFIG["reply"]）里，这三个是子段名而不是
-# provider/config；核心只认其中的 llm，tts / realtime 归 web demo 自己读。
+# Nella forma annidata del demo della sezione reply (CONFIG["reply"] di web/run.py), questi tre sono nomi di sotto-sezioni invece che
+# provider/config; il core riconosce solo llm al suo interno, tts / realtime restano gestiti dal web demo stesso.
 _REPLY_DEMO_KEYS = ("llm", "tts", "realtime")
 
 
 def _reply_factory(provider, cfg):
-    """reply：openai -> 内置流式 provider；custom -> 直接用 config.fn 那个函数。"""
+    """reply: openai -> provider integrato streaming; custom -> usa direttamente la funzione config.fn."""
     if provider in (None, "openai"):
         from voicemem.reply import openai_reply
         return openai_reply(model=cfg.get("model"), api_key=cfg.get("api_key"),
@@ -148,27 +148,27 @@ def _reply_factory(provider, cfg):
         fn = cfg.get("fn")
         if not callable(fn):
             raise ValueError(
-                'reply.provider="custom" 需要 config.fn 给一个可调用对象；'
-                "直接传函数更省事：VoiceMem(reply=fn)"
+                'reply.provider="custom" richiede config.fn con un oggetto callable; '
+                "; passare la funzione direttamente è più semplice: VoiceMem(reply=fn)"
             )
         return fn
     _bad("reply", provider, ["openai", "custom"])
 
 
 def build_kwargs(config: dict) -> dict:
-    """把统一 config dict 解析成 ``VoiceMem(**kwargs)`` 能吃的注入参数 dict。
+    """Analizza il dict config unificato nel dict di parametri di iniezione che ``VoiceMem(**kwargs)`` può consumare.
 
-    返回的 dict 只含实际给出的项（缺省的组件不放 key，交给 VoiceMem 用内置默认）：
-    ``api_key`` / ``base_url`` / ``mode`` + ``embedding`` / ``schema`` /
-    ``memory_engine`` 等注入函数（无参工厂，语义同 ``VoiceMem(embedding=lambda: ...)``）。
+    Il dict restituito contiene solo le voci effettivamente fornite (i componenti default non inseriscono la chiave, lasciando a VoiceMem usare i default integrati):
+    ``api_key`` / ``base_url`` / ``mode`` + funzioni di iniezione come ``embedding`` / ``schema`` /
+    ``memory_engine`` (factory senza parametri, semanticamente equivalente a ``VoiceMem(embedding=lambda: ...)``).
 
-    ``reply`` 段解析成 ``VoiceMem(reply=fn)``；demo 那份嵌套写法只取其中的 ``llm``，
-    ``tts`` / ``realtime`` 仍由 web demo 自己读。
+    La sezione ``reply`` viene analizzata in ``VoiceMem(reply=fn)``; nella forma annidata del demo si prende solo ``llm``,
+    ``tts`` / ``realtime`` restano letti dal web demo stesso.
     """
     config = config or {}
     kwargs: dict = {}
 
-    # ── 顶层：api_key / base_url / mode 直接透传 ──
+    # ── Livello top: api_key / base_url / mode passati direttamente ──
     if config.get("api_key") is not None:
         kwargs["api_key"] = config["api_key"]
     if config.get("base_url") is not None:
@@ -182,31 +182,31 @@ def build_kwargs(config: dict) -> dict:
     if config.get("space") is not None:
         kwargs["space"] = config["space"]
 
-    # ── embedding：VoiceMem 的注入键名是 embedding ──
+    # ── embedding: la chiave di iniezione di VoiceMem è embedding ──
     if "embedding" in config:
         provider, cfg = _split(config["embedding"])
         kwargs["embedding"] = _embedding_factory(provider, cfg)
 
-    # ── slots：映射到 VoiceMem 的注入键名 schema（Classify 用的分类器）──
+    # ── slots: mappatura alla chiave di iniezione schema di VoiceMem (classificatore per Classify)──
     if "slots" in config:
         provider, cfg = _split(config["slots"])
         kwargs["schema"] = _slots_factory(provider, cfg)
 
-    # ── vad：判「说完了」的 VAD（VoiceStream 用）──
+    # ── vad: VAD che rileva "ha finito di parlare" (usato da VoiceStream)──
     if "vad" in config:
         provider, cfg = _split(config["vad"])
         kwargs["vad"] = _vad_factory(provider, cfg)
 
-    # ── memory_engine：mem0 是内置默认，返回 None 就不覆盖 ──
+    # ── memory_engine: mem0 è il default integrato, se restituisce None non sovrascrive ──
     if "memory_engine" in config:
         provider, cfg = _split(config["memory_engine"])
         factory = _memory_engine_factory(provider, cfg)
         if factory is not None:
             kwargs["memory_engine"] = factory
 
-    # ── llm：左右脑内部 LLM。现有代码读 OPENAI_MODEL / OPENAI_API_KEY /
-    #    OPENAI_BASE_URL 这些 env，这里把 config 落到这些 env（api_key/base_url
-    #    也透传给 VoiceMem 参数，保持和顶层一致）。──
+    # ── llm: LLM interno cervello sinistro/destro. Il codice esistente legge OPENAI_MODEL / OPENAI_API_KEY /
+    #    OPENAI_BASE_URL come env, qui si scrivono questi env dal config (api_key/base_url
+    #    anche passati a VoiceMem params, coerente con il livello top).──
     if "llm" in config:
         provider, cfg = _split(config["llm"])
         if provider not in (None, "openai"):
@@ -220,8 +220,8 @@ def build_kwargs(config: dict) -> dict:
             os.environ["OPENAI_BASE_URL"] = cfg["base_url"]
             kwargs.setdefault("base_url", cfg["base_url"])
 
-    # ── reply：回复模型。两种写法——扁平 {"provider","config"}，或 demo 那份
-    #    {"llm","tts","realtime"} 嵌套（核心只取 llm，tts/realtime 仍由 web 自己读）。──
+    # ── reply: modello di risposta. Due forme — piatta {"provider","config"}, o quella del demo
+    #    {"llm","tts","realtime"} annidata (il core prende solo llm, tts/realtime restano letti dal web).──
     if "reply" in config:
         seg = config["reply"] or {}
         if any(k in seg for k in _REPLY_DEMO_KEYS):

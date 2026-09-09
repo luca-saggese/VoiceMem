@@ -1,30 +1,30 @@
-"""Voicemem：左右脑分离的记忆框架，带音频原生感知层。
+"""Voicemem: framework di memoria con separazione sinistro/destro, con layer di percezione audio-native.
 
-本文件就是一张「组件目录」——voicemem 的每一个组件都在这里对外暴露，
-`from voicemem import X` 即可拿到。音频类组件（SpeakerEncoder /
-ASTEnvironmentDetector 等）依赖 torch / sherpa-onnx，所以采用惰性加载
-（PEP 562 `__getattr__`）：只有真正访问到某个名字时才 import 它对应的模块，
-`import voicemem` 本身永远不会拉起这些重依赖——纯文本安装照样能用核心。
+Questo file è un "catalogo dei componenti" — ogni componente di voicemem è esposto qui,
+`from voicemem import X` basta per ottenerlo. I componenti audio (SpeakerEncoder /
+ASTEnvironmentDetector ecc.) dipendono da torch / sherpa-onnx, quindi usano caricamento lazy
+(PEP 562 `__getattr__`): solo quando si accede effettivamente a un nome viene importato il suo modulo corrispondente,
+`import voicemem` di per sé non avvierà mai queste dipendenze pesanti — l'installazione solo testo può comunque usare il core.
 
-分组一览：
-  · 核心          VoiceMem / SearchResult / RightBrainHit / AudioPerception
-  · 回复（输出侧） openai_reply / normalize_reply（见 voicemem/reply.py）
-  · 语音接入适配   VoiceInput / VoiceContent / VoiceprintRegistry / ingest_voice_input …
-  · 音频原生感知   SpeakerEncoder / *EnvironmentDetector / Scene* / Music/Place/Routine …
-  · 右脑情绪层     EmotionLayer / EmotionLayerConfig / EmotionLayerResult
-  · 便捷记忆 API    Memory / inject / recall / remember
-  · 子包           leftbrain / rightbrain / utils（audio·common·fusion 都在 utils 下）
+Panoramica per gruppi:
+  · Core          VoiceMem / SearchResult / RightBrainHit / AudioPerception
+  · Risposta (lato output) openai_reply / normalize_reply (vedi voicemem/reply.py)
+  · Adattamento accesso vocale   VoiceInput / VoiceContent / VoiceprintRegistry / ingest_voice_input …
+  · Percezione audio-native   SpeakerEncoder / *EnvironmentDetector / Scene* / Music/Place/Routine …
+  · Layer emotivo destro     EmotionLayer / EmotionLayerConfig / EmotionLayerResult
+  · API memoria convenience    Memory / inject / recall / remember
+  · Sottopacchetti        leftbrain / rightbrain / utils (audio·common·fusion sono tutti sotto utils)
 """
 
 from __future__ import annotations
 
-# ── 第三方库的 INFO 噪音 ────────────────────────────────────────────────────
-# 跑一次基础用法，openai SDK 会为每次请求打一行 "HTTP Request: POST ... 200 OK"
-# （二三十行），funasr 每转写一块刷一条 rtf 进度条，mem0 每存一条打一行
-# "Updating memory with data=..."。真正的结果被埋在中间，第一次用的人会以为出错。
+# ── Rumore INFO delle librerie di terze parti ───────────────────────────────────────────
+# Esegui un uso base, l'SDK openai stampa una riga "HTTP Request: POST ... 200 OK"
+# per ogni richiesta (venti-trenta righe), funasr stampa una barra di progresso rtf per ogni blocco trascritto, mem0 stampa una riga
+# "Updating memory with data=..." per ogni salvataggio. Il risultato vero è sepolto nel mezzo, chi lo usa per la prima volta penserebbe che qualcosa non va.
 #
-# 用 filter 而不是 setLevel：调用方之后再 basicConfig 也盖不掉这里的设置。
-# 想看全部：VOICEMEM_VERBOSE=1。
+# Uso filter invece di setLevel: se il chiamante chiama basicConfig dopo, non può sovrascrivere questa impostazione.
+# Vuoi vedere tutto: VOICEMEM_VERBOSE=1.
 def _quiet_third_party_logs() -> None:
     import logging
     import os
@@ -32,15 +32,16 @@ def _quiet_third_party_logs() -> None:
     if os.environ.get("VOICEMEM_VERBOSE", "0") != "0":
         return
 
-    os.environ.setdefault("TQDM_DISABLE", "1")          # funasr / transformers 的进度条
+    os.environ.setdefault("TQDM_DISABLE", "1")          # Barre di progresso di funasr / transformers
 
-    # 用 setLevel 而不是 addFilter：filter 只作用于挂它的那个 logger，不会传给
-    # 子 logger（openai._base_client、funasr.xxx 都是子 logger），实测挡不住。
-    # 等级则是继承的：给 "openai" 设了 WARNING，"openai._base_client" 也照办。
-    # httpx2 / httpcore2 是 mem0 那条依赖链带进来的分叉版本，logger 名字也带 2。
-    # 只写 "httpx" 挡不住它——每次 embedding / chat 调用都会刷一行
-    # "HTTP Request: POST https://api.openai.com/v1/embeddings ..."，
-    # 一次 ingest 十几行。
+    # Uso setLevel invece di addFilter: filter agisce solo sul logger a cui è attaccato, non viene passato ai
+    # logger figli (openai._base_client, funasr.xxx sono tutti logger figli), nei test non blocca.
+    # I logger figli (openai._base_client, funasr.xxx sono tutti logger figli) nei test non vengono bloccati.
+    # Il livello viene ereditato: se imposti WARNING su "openai", anche "openai._base_client" lo segue.
+    # httpx2 / httpcore2 sono versioni forkate portate dalla catena di dipendenze di mem0, anche i nomi dei logger hanno il 2.
+    # Scrivere solo "httpx" non blocca — ogni chiamata embedding/chat stampa una riga
+    # "HTTP Request: POST https://api.openai.com/v1/embeddings ...",
+    # una ingest fa decine di righe.
     for name in ("openai", "httpx", "httpx2", "httpcore", "httpcore2",
                  "mem0", "funasr", "modelscope",
                  "sentence_transformers", "transformers"):

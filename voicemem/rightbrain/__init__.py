@@ -1,16 +1,16 @@
-"""右脑 Experience Layer。
+"""Experience Layer del cervello destro.
 
-两层：
+Due livelli:
 
-  · **记忆层** heartnote + response_experience，按锚点检索（store/experience_repository）
-  · **判断层** rb_traits + rb_evidence，一个节点 = 一条关于这个人的判断，
-    claim 带向量，按 query 语义检索，作为 source="profile" 的 rb_hit 返回
-    （见 traits_store.py 和 brain._rb_trait_hits）
+  · **Livello memoria** heartnote + response_experience, retrieval per anchor (store/experience_repository)
+  · **Livello giudizio** rb_traits + rb_evidence, un nodo = un giudizio su questa persona,
+    claim con vettore, retrieval semantico per query, restituito come rb_hit con source="profile"
+    (vedi traits_store.py e brain._rb_trait_hits)
 
-判断层取代了原来的 slot→entity→heartnote 图。那套结构里 entity 一层身兼三职
-（判断 / 话题 / 情绪词），实测滚成「悲伤 ×61」「佳琪 ×52」这样的大杂烩，
-描述还要靠事后巩固批处理补。旧表（rb_slots/rb_entities）只读保留一个版本，
-不再写入。
+Il livello giudizio ha sostituito il vecchio grafo slot→entity→heartnote. In quella struttura il livello entity svolgeva tre ruoli
+(giudizio / argomento / parola emotiva), nei test reali si è trasformato in un miscuglio tipo "tristezza ×61", "Jiaqi ×52",
+le descrizioni dovevano essere integrate con consolidamento batch post-hoc. Le tabelle vecchie (rb_slots/rb_entities) sono mantenute in sola lettura in una versione,
+non si scrive più.
 """
 from .anchor_router import AnchorRouter
 from .attribution_manager import AttributionManager

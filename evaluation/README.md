@@ -1,37 +1,37 @@
-# evaluation — 跑一条命令，出一个数字
+# evaluation — esegui un comando, ottieni un numero
 
 ```bash
 export OPENAI_API_KEY=sk-...
 
 python evaluation/run.py --dataset locomo --data data/locomo.json
 ```
-跑完直接打印，结果同时写进 `results/locomo.json`：
+Dopo l'esecuzione stampa direttamente, il risultato viene anche scritto in `results/locomo.json`:
 
 ```text
-locomo  10 段对话 · 152 题
-得分 139/152  =  91.4%
+locomo  10 conversazioni · 152 domande
+Punteggio 139/152  =  91.4%
    multi_hop                88.2%
    temporal                 85.7%
    single_hop               95.1%
-检索中位数 12ms · 记忆中位数 298 tokens
-结果已存 results/locomo.json
+Mediana retrieval 12ms · Mediana memoria 298 tokens
+Risultato salvato in results/locomo.json
 ```
 
-## 常用参数
+## Parametri comuni
 
-| 参数 | 干什么 | 默认 |
+| Parametro | Cosa fa | Default |
 |---|---|---|
-| `--dataset` / `--data` | 用哪个适配器 / 数据文件 | 必填 |
-| `--answer-model` | 拿记忆作答的模型 | `gpt-4o-mini` |
-| `--judge` | 判分的裁判模型 | `gpt-4o-mini` |
-| `--top-k` | 每题检索几条记忆 | `5` |
-| `--mode` | `left_brain_single`=只测事实记忆；`text_mode`=连右脑一起 | `left_brain_single` |
-| `--workers` | 并发跑几段对话 | `4` |
-| `--limit` | 只跑前 N 段（调试用） | 全部 |
-| `--resume` | 接着上次跑，跳过已完成的对话 | 关 |
-| `--save-memory` | 把每题检索到的记忆也存进结果，便于人工复核 | 关 |
-| `--inspect` | 只解析数据集并打印，不跑评测 | 关 |
-| `--no-score` | 只生成答案不判分，之后用 `score.py` 判 | 关 |
+| `--dataset` / `--data` | Quale adattatore / file dati usare | Obbligatorio |
+| `--answer-model` | Modello che risponde usando la memoria | `gpt-4o-mini` |
+| `--judge` | Modello judge per la valutazione | `gpt-4o-mini` |
+| `--top-k` | Quante memorie recuperare per domanda | `5` |
+| `--mode` | `left_brain_single`=testa solo memoria fattuale; `text_mode`=include anche cervello destro | `left_brain_single` |
+| `--workers` | Quante conversazioni eseguire in parallelo | `4` |
+| `--limit` | Esegui solo le prime N conversazioni (per debug) | Tutte |
+| `--resume` | Continua dall'ultima volta, salta le conversazioni completate | Off |
+| `--save-memory` | Salva anche le memorie recuperate per ogni domanda nel risultato, per verifica manuale | Off |
+| `--inspect` | Analizza solo il dataset e stampa, non esegue la valutazione | Off |
+| `--no-score` | Genera solo le risposte senza valutare, poi valuta con `score.py` | Off |
 
 结果每跑完一段就落盘，所以跑几小时的评测中途挂了，加 `--resume` 接着跑即可。
 

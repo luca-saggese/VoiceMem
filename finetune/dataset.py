@@ -28,23 +28,23 @@ class DialogueDataset:
 def check(row, i=0):
     msgs = row["messages"]
 
-    assert msgs[0]["role"] == "system", f"第 {i} 条第一句不是 system"
-    assert msgs[-1]["role"] == "assistant", f"第 {i} 条最后一句不是 assistant"
-    assert len(msgs) % 2 == 1, f"第 {i} 条 system 之后没有成对的 user/assistant"
+    assert msgs[0]["role"] == "system", f"Riga {i}: la prima frase non è system"
+    assert msgs[-1]["role"] == "assistant", f"Riga {i}: l'ultima frase non è assistant"
+    assert len(msgs) % 2 == 1, f"Riga {i}: dopo system non ci sono coppie user/assistant"
 
     for j, m in enumerate(msgs[1:]):
         want = "user" if j % 2 == 0 else "assistant"
-        assert m["role"] == want, f"第 {i} 条第 {j + 1} 句该是 {want}"
-        assert isinstance(m["content"], str), f"第 {i} 条第 {j + 1} 句 content 不是字符串"
+        assert m["role"] == want, f"Riga {i} frase {j + 1}: dovrebbe essere {want}"
+        assert isinstance(m["content"], str), f"Riga {i} frase {j + 1}: content non è una stringa"
 
-    assert history_turns(row) <= MAX_HISTORY, f"第 {i} 条历史超过 {MAX_HISTORY} 轮"
+    assert history_turns(row) <= MAX_HISTORY, f"Riga {i}: storia supera {MAX_HISTORY} turni"
 
     meta = row.get("meta", {})
-    assert meta.get("lang") in LANGS, f"第 {i} 条 lang 非法: {meta.get('lang')}"
-    assert meta.get("category") in CATEGORIES, f"第 {i} 条 category 非法: {meta.get('category')}"
+    assert meta.get("lang") in LANGS, f"Riga {i}: lang non valido: {meta.get('lang')}"
+    assert meta.get("category") in CATEGORIES, f"Riga {i}: category non valida: {meta.get('category')}"
 
     want = system_prompt(meta["category"], meta["lang"])
-    assert msgs[0]["content"] == want, f"第 {i} 条 system 和 category/lang 对不上"
+    assert msgs[0]["content"] == want, f"Riga {i}: system non corrisponde a category/lang"
 
 
 def history_turns(row):

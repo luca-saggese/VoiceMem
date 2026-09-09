@@ -5,32 +5,32 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
-# 本地草稿测试不进仓库，但按 README 两节写的那两个装包自检要进
+# I test di bozza locali non entrano nel repository, ma i due pacchetti menzionati nelle due sezioni del README per l'auto-verifica sì
 tests/*
 !tests/test_offline_engine.py
 !tests/test_streaming.py
 !tests/test_demo_from_zero.py
 
-# 运行时数据：记忆库、评测结果、录音归档
+# Dati runtime: database memoria, risultati valutazione, archivio registrazioni
 results/
 memory/
 out/
 
-# 环境与本地配置
+# Ambiente e configurazione locale
 .env
 .venv/
 .claude/
 .DS_Store
 
-# 模型权重：由 scripts/download_models.sh 拉取，不进仓库
+# Pesi dei modelli: scaricati da scripts/download_models.sh, non nel repository
 *.onnx
 *.ckpt
 *.pt
 *.pth
 *.safetensors
 *.bin
-# 按用途分的模型目录（连同 tokens.txt / test_wavs 这些随包资产一起）；
-# models/ 下的内容全部由 scripts/download_models.sh 拉取，不进仓库
+# Directory dei modelli per scopo (insieme a tokens.txt / test_wavs come asset del pacchetto);
+# tutto ciò che è in models/ viene scaricato da scripts/download_models.sh, non nel repository
 models/vad/
 models/asr/
 models/speaker/
@@ -41,19 +41,19 @@ models/tts/
 models/slm/
 models/reply_adapter/
 
-# 本地演示分叉与个人种子脚本
+# Fork demo locale e script seed personali
 demo_local/
 scripts/seed_*.py
 
-# Electron 桌面壳
+# Wrapper desktop Electron
 node_modules/
 
-# 默认记忆根目录（不传 memory_root 时落在当前目录）
+# Directory radice memoria predefinita (se non passi memory_root finisce nella directory corrente)
 voicemem_memory/
 examples/example_memory/
-# 记忆空间：**目录结构**进仓库，里面的数据不进。
-# clone 下来是两个空文件夹——demo（跑 demo 用）和 myvoicemem（你自己的），
-# 谁跑谁自己积累，不把任何人的记忆推上去。
+# Spazio memoria: la **struttura delle directory** entra nel repository, i suoi dati no.
+# Dopo il clone ci sono due cartelle vuote — demo (per eseguire il demo) e myvoicemem (le tue),
+# chi esegue accumula autonomamente, non spingi le memorie di nessuno.
 voicemem_memoryspace/*
 !voicemem_memoryspace/demo/
 !voicemem_memoryspace/myvoicemem/

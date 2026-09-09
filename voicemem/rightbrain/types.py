@@ -1,12 +1,12 @@
-"""右脑 Experience Layer 数据类型。
+"""Tipi di dati del livello Experience del cervello destro.
 
-三大记忆类：
-  user_interaction_profile   — 用户长期风格偏好
-  heartnote                   — 情境情绪规律
-  response_experience         — 回应成败经验（最高优先级）
+Tre classi principali di memoria:
+  user_interaction_profile   — Preferenze stilistiche a lungo termine dell'utente
+  heartnote                   — Pattern emotivi contestuali
+  response_experience         — Esperienze di risposta riuscite/sbagliate (massima priorità)
 
-检索入口：MemoryAnchor → 挂左脑实体
-查询计划：MemoryQueryPlan → Preprocessor 信号 + anchors
+Punto di ingresso retrieval: MemoryAnchor → aggancia entity del cervello sinistro
+Piano query: MemoryQueryPlan → segnali Preprocessor + anchors
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ TTL = Literal["session", "short_term", "long_term"]
 @dataclass
 class MemoryAnchor:
     anchor_type: AnchorType
-    anchor_id: str | None        # None = 全局（如 user_self, global_style）
+    anchor_id: str | None        # None = globale (es. user_self, global_style)
     role: AnchorRole
     weight: float = 1.0
     confidence: float = 1.0
@@ -47,7 +47,7 @@ class MemoryAnchor:
 
 @dataclass
 class CurrentSignals:
-    """Preprocessor 检测到的当前轮信号，不存储，只用于检索优先级。"""
+    """Segnali rilevati dal Preprocessor nel turno corrente, non memorizzati, usati solo per priorità di retrieval."""
     affect_hint: str | None = None                          # "frustrated" / "satisfied" ...
     affect_intensity: Literal["low", "medium", "high"] | None = None
     dissatisfaction_signal: bool = False
@@ -71,18 +71,18 @@ class RightBrainMemory:
     user_id: str
     memory_class: MemoryClass
     content: str
-    condition: str | None           # 适用情境描述（可选）
-    priority: float                 # 0~1，response_experience 通常最高
+    condition: str | None           # Descrizione contesto applicabile (opzionale)
+    priority: float                 # 0~1, response_experience solitamente la più alta
     confidence: float
     ttl: TTL
-    metadata: dict[str, Any]        # 失败原因、next_time_policy 等
+    metadata: dict[str, Any]        # Motivo fallimento, next_time_policy, ecc.
     evidence_turn_ids: list[str]
     evidence_memory_ids: list[str]
     created_at: str
     updated_at: str
-    #: 本次检索命中的锚点得分（SUM(link.weight*link.confidence)，见
-    #: store.search_by_anchors）。不落库——同一条记忆在不同查询下得分不同，
-    #: 只在检索结果里携带，供最终排序把"检索相关度"混进静态 priority。
+    #: Punteggio anchor trovato in questa ricerca (SUM(link.weight*link.confidence), vedi
+    #: store.search_by_anchors). Non salvato nel database — la stessa memoria ha punteggi diversi per query diverse,
+    #: trasportata solo nei risultati di retrieval, utile al sorting finale per mescolare "rilevanza retrieval" nella priority statica.
     anchor_score: float = 0.0
 
 
@@ -103,10 +103,10 @@ class RightBrainAnchorLink:
 
 @dataclass
 class RightBrainContext:
-    """右脑检索结果，供 Prompt Builder 使用。
+    """Risultati di retrieval del cervello destro, per uso del Prompt Builder.
 
-    仅含 heartnote 和 response_experience。
-    user_interaction_profile 由前刺层 (UserProfileStore) 独立管理。
+    Contiene solo heartnote e response_experience.
+    user_interaction_profile è gestito indipendentemente dal livello pre-stimolo (UserProfileStore).
     """
     response_experiences: list[RightBrainMemory] = field(default_factory=list)
     situation_patterns: list[RightBrainMemory] = field(default_factory=list)
@@ -116,11 +116,11 @@ class RightBrainContext:
         return not (self.response_experiences or self.situation_patterns)
 
     def to_prompt_block(self) -> str:
-        """生成注入 LLM prompt 的文本块。
+        """Genera blocco testuale da iniettare nel prompt LLM.
 
-        每条记忆前带 [YYYY-MM-DD] 日期——没有日期，下游模型对"什么时候的事"
-        类问题（temporal reasoning）完全无从判断；日期一直存在 created_at 里，
-        只是之前渲染时丢掉了。
+        Ogni memoria ha un prefisso data [YYYY-MM-DD] — senza data, il modello downstream non può assolutamente determinare "quando è successo"
+        per domande di tipo (ragionamento temporale); la data esiste sempre in created_at,
+        è stata solo persa durante il rendering precedente."
         """
         lines: list[str] = []
 

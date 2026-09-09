@@ -1,15 +1,14 @@
-"""右脑 slot→entity→memory 图层。
+"""Layer slot→entity→memory del cervello destro.
 
-跟左脑同样的三层结构，但内容是感性/主观的，不是左脑那种事实性分类：
+Stessa struttura a tre livelli del cervello sinistro, ma il contenuto è sensibile/soggettivo, non la classificazione fattuale del cervello sinistro:
 
-  slot（5个初始类目：情绪 / 喜好与厌恶 / 表达风格 / 思维模式 / 应对方式）
-    └── entity（具体的感性节点，如"情绪"下的"开心"、"喜好与厌恶"下的"被打断"）
-          └── memory（挂在某个 entity 下的具体记忆 id，指向 right_brain_memories.id）
+  slot (5 categorie iniziali: emozione / preferenze e avversioni / stile espressivo / modello mentale / modalità di coping)
+    └── entity (nodi sensitivi specifici, es. "felice" sotto "emozione", "essere interrotto" sotto "preferenze e avversioni")
+          └── memory (id di memoria specifici appesi a un'entity, puntano a right_brain_memories.id)
 
-slot 是这里真正的图节点（有自己的 id + description），不是左脑那种字符串属性。
+Lo slot è qui il vero nodo del grafo (con il proprio id + description), non un attributo stringa come nel cervello sinistro.
 
-entity 去重靠语义相似度（不是精确字符串匹配）：新提炼出的感性标签先跟同一
-slot 下已有 entity 的 embedding 比相似度，够像就复用，不够像才新建。
+La deduplicazione delle entity si basa sulla similarità semantica (non corrispondenza esatta di stringhe): l'etichetta sensitiva appena estratta viene prima confrontata in similarità con l'embedding delle entity già esistenti nello stesso slot, se simile abbastanza viene riutilizzata, altrimenti ne viene creata una nuova.
 """
 
 from __future__ import annotations
@@ -23,25 +22,25 @@ from pathlib import Path
 
 from voicemem.utils.common._graph_common import cosine as _cosine, new_id as _new_id, utc_iso as _utc_iso
 
-#: 同一个 slot 下，新标签跟已有实体像到什么程度就算同一个。
+#: A che punto un nuovo tag è simile abbastanza alle entity esistenti nello stesso slot da essere considerato lo stesso.
 #:
-#: 原来是 0.65——对 E5 的中文短语来说等于「全都合并」：实测基线本来就很高，
-#: 「讨厌吃饭吧唧嘴」跟「讨厌被打断」有 0.934，「讨厌开长会」跟它 0.922，全被
-#: 归成同一个实体。后果是右脑跑一阵之后再也不长新节点，用户说什么新东西图上
-#: 都没反应，看着像没记住。
-#: 实测真正该合并的那种（「喜欢手冲咖啡」↔「偏好手冲咖啡」）是 0.964，
-#: 0.95 正好把两类分开。
+#: Originariamente 0.65 — per le frasi cinesi di E5 equivale a "tutto fuso": la baseline è già alta nei test reali,
+#: "odia quando mangia rumorosamente" e "odia essere interrotto" hanno 0.934, "odia le riunioni lunghe" ha 0.922, tutti
+#: raggruppati in una singola entity. Il risultato è che dopo un po' il cervello destro smette di creare nuovi nodi, qualsiasi cosa nuova dica l'utente non ha reazione sulla mappa,
+#: sembra come se non ricordasse nulla.
+#: I casi che dovrebbero davvero essere fusi ("ama il caffè fatto a mano" ↔ "preferisce il caffè fatto a mano") sono 0.964,
+#: 0.95 separa esattamente le due categorie.
 DEFAULT_MATCH_THRESHOLD = float(os.environ.get("VOICEMEM_RB_ENTITY_MERGE", "0.95"))
 
 
-# 初始5个感性slot；description先留空，后续再补。
-# emotion 的初始 entity 复用原有8个情绪标签。
+#: I 5 slot sensitivi iniziali; description lasciato vuoto per ora, da completare dopo.
+# Le entity iniziali di emotion riutilizzano le 8 etichette emotive esistenti.
 SEED_SLOTS: list[tuple[str, str, list[str]]] = [
-    ("情绪", "", ["焦虑", "悲伤", "委屈", "孤独", "纠结", "平静", "开心", "疲惫"]),
-    ("喜好与厌恶", "", []),
-    ("表达风格", "", []),
-    ("思维模式", "", []),
-    ("应对方式", "", []),
+    ("Emozione", "", ["ansia", "tristezza", "ingiustizia", "solitudine", "confusione", "pace", "gioia", "stanchezza"]),
+    ("Preferenze e avversioni", "", []),
+    ("Stile espressivo", "", []),
+    ("Modello mentale", "", []),
+    ("Modalità di coping", "", []),
 ]
 
 
@@ -62,13 +61,13 @@ class RBEntity:
     name: str
     description: str = ""
     embedding: list[float] | None = None
-    source_entity_id: str | None = None  # 左脑 cognitive_graph Entity.id，仅"关系节点"类 entity 会填
+    source_entity_id: str | None = None  # Entity.id del cognitive_graph del cervello sinistro, compilato solo per entity di tipo "nodo relazione"
     created_at: str = field(default_factory=_utc_iso)
     updated_at: str = field(default_factory=_utc_iso)
 
 
 class RightBrainGraphStore:
-    """SQLite 存取右脑 slot→entity→memory 三层图。线程安全：每次操作新建连接。"""
+    """SQLite per memorizzare/recuperare il grafo a tre livelli slot→entity→memory del cervello destro. Thread-safe: crea una nuova connessione per ogni operazione."""
 
     def __init__(self, db_path: Path | str) -> None:
         self._path = Path(db_path)
@@ -118,8 +117,8 @@ class RightBrainGraphStore:
             CREATE INDEX IF NOT EXISTS idx_rbem_entity ON rb_entity_memories(entity_id);
             CREATE INDEX IF NOT EXISTS idx_rbem_memory ON rb_entity_memories(user_id, memory_id);
             """)
-            # 迁移：老库（CREATE TABLE IF NOT EXISTS 对已存在的表不生效）补上
-            # source_entity_id 列——关系节点功能上线前建的 rb_graph.sqlite 都缺这列。
+            # Migrazione: il vecchio database (CREATE TABLE IF NOT EXISTS non funziona su tabelle esistenti) aggiunge
+            # la colonna source_entity_id — tutti i rb_graph.sqlite creati prima del lancio della funzione nodo relazione mancano di questa colonna.
             cols = {row["name"] for row in c.execute("PRAGMA table_info(rb_entities)")}
             if "source_entity_id" not in cols:
                 c.execute("ALTER TABLE rb_entities ADD COLUMN source_entity_id TEXT")
@@ -128,10 +127,10 @@ class RightBrainGraphStore:
                 "ON rb_entities(user_id, slot_id, source_entity_id)"
             )
 
-    # ── 种子初始化 ────────────────────────────────────────────────────────────
+    # ── Inizializzazione seed ─────────────────────────────────────────────────────────────
 
     def ensure_seed_slots(self, user_id: str) -> None:
-        """确保该用户已有5个初始slot（+情绪下面的8个初始entity）。幂等，可重复调用。"""
+        """Assicura che questo utente abbia già 5 slot iniziali (+ 8 entity iniziali sotto Emozione). Idempotente, può essere chiamato ripetutamente."""
         for slot_name, slot_desc, seed_entities in SEED_SLOTS:
             slot = self.get_or_create_slot(user_id, slot_name, description=slot_desc)
             for ent_name in seed_entities:
@@ -171,7 +170,7 @@ class RightBrainGraphStore:
         with self._conn() as c:
             c.execute("UPDATE rb_slots SET description=? WHERE id=?", (description, slot_id))
 
-    # ── Entity（精确名字匹配，适合种子/固定词表场景） ────────────────────────
+    # ── Entity (corrispondenza nome esatta, adatta per seed/glossari fissi) ────────────────────────
 
     def get_or_create_entity(
         self,
@@ -191,7 +190,7 @@ class RightBrainGraphStore:
                 return _row_to_entity(row)
             return self._insert_entity(c, user_id, slot_id, name, description, embedding)
 
-    # ── Entity（语义相似度匹配，适合自由生成的感性 entity） ───────────────────
+    # ── Entity (corrispondenza similarità semantica, adatta per entity sensitive generate liberamente) ───────────────────
 
     def find_similar_entity(
         self,
@@ -201,7 +200,7 @@ class RightBrainGraphStore:
         *,
         threshold: float = DEFAULT_MATCH_THRESHOLD,
     ) -> RBEntity | None:
-        """在同一 slot 下找语义最相似的 entity，相似度不够则返回 None。"""
+        """Trova l'entity semanticamente più simile nello stesso slot, restituisce None se la similarità non è sufficiente."""
         best: RBEntity | None = None
         best_sim = -1.0
         for ent in self.get_entities_for_slot(user_id, slot_id):
@@ -222,11 +221,11 @@ class RightBrainGraphStore:
         description: str = "",
         threshold: float = DEFAULT_MATCH_THRESHOLD,
     ) -> tuple[RBEntity, bool]:
-        """先按语义相似度找现有 entity，找到就复用；没有就新建。
+        """Prima cerca un'entity esistente per similarità semantica, se trovata la riutilizza; altrimenti ne crea una nuova.
 
         Returns
         -------
-        (entity, created) — created=True 表示这次新建了一个 entity。
+        (entity, created) — created=True significa che è stata creata una nuova entity questa volta.
         """
         existing = self.find_similar_entity(user_id, slot_id, embedding, threshold=threshold)
         if existing is not None:
@@ -262,11 +261,11 @@ class RightBrainGraphStore:
         )
         return ent
 
-    # ── Entity（按左脑 entity.id 精确关联，适合"关系节点"场景） ────────────────
-    # 一个左脑实体（人/地点/项目...）永远对应同一个右脑关系节点，靠 source_entity_id
-    # 精确匹配，不走语义相似度——语义相似度是给自由生成的抽象标签去重用的，这里
-    # 反而不需要：左脑实体改名/合并不影响这里的匹配（ID 不变），跟今天修的
-    # 锚点用真实 entity.id 而不是名字字符串是同一个思路。
+    # ── Entity (corrispondenza precisa per entity.id del cervello sinistro, adatta per scenari "nodo relazione") ────────────────
+    # Un'entity del cervello sinistro (persona/luogo/progetto...) corrisponde sempre allo stesso nodo relazione del cervello destro, tramite source_entity_id
+    # corrispondenza esatta, non similarità semantica — la similarità semantica è per deduplicare etichette astratte generate liberamente, qui
+    # non serve: il renaming/fusione delle entity del cervello sinistro non influisce sulla corrispondenza qui (l'ID non cambia), stessa logica di oggi di
+    # usare entity.id reali negli anchor invece di stringhe di nome.
 
     def get_entity_by_source_id(
         self, user_id: str, slot_id: str, source_entity_id: str,
@@ -282,24 +281,25 @@ class RightBrainGraphStore:
     def get_or_create_entity_by_source_id(
         self, user_id: str, slot_id: str, source_entity_id: str, name: str,
     ) -> tuple[RBEntity, bool]:
-        """按左脑 entity.id 查找/创建关系节点。
+        """Trova/crea nodo relazione per entity.id del cervello sinistro.
 
         Returns
         -------
-        (entity, created) — created=True 表示这次新建了一个 entity。
+        (entity, created) — created=True significa che è stata creata una nuova entity questa volta.
         """
         existing = self.get_entity_by_source_id(user_id, slot_id, source_entity_id)
         if existing is not None:
             return existing, False
         with self._conn() as c:
-            # 同名节点已存在但 source_entity_id 对不上：左脑对同一个现实事物
-            # 可能给出不止一个 entity.id（同名实体在后续 utterance 里被重新
-            # 抽取/换了 entity_type），而 rb_entities 有 UNIQUE(user_id,
-            # slot_id, name)——直接 INSERT 会撞唯一约束抛异常，调用方
-            # (core.py::_finish_ingest 的关系节点循环) 整段中断，这条
-            # utterance 剩下实体的锚点和 link_memory 全部丢失。同名即同物，
-            # 复用已有节点；已有节点还没认领 source_entity_id 时顺手认领，
-            # 让后续查找能走更快的 source_id 路径。
+            # Nodo con lo stesso nome esiste già ma source_entity_id non corrisponde: il cervello sinistro può dare
+            # più di un entity.id per la stessa cosa reale (entità omonime vengono re-estratte nelle utterance successive/
+            # cambiano entity_type), e rb_entities ha UNIQUE(user_id,
+            # slot_id, name) — INSERT diretto causerebbe violazione vincolo unico con eccezione, il chiamante
+            # (loop nodo relazione in core.py::_finish_ingest) interromperebbe l'intero blocco, perdendo
+            # tutti gli anchor e link_memory delle entity rimanenti in questa
+            # utterance. Stesso nome = stessa entità,
+            # riutilizza il nodo esistente; se il nodo esistente non ha ancora claimato source_entity_id, fallo ora,
+            # così le ricerche future possono usare il percorso più veloce source_id.
             row = c.execute(
                 "SELECT * FROM rb_entities WHERE user_id=? AND slot_id=? AND name=?",
                 (user_id, slot_id, name),
@@ -322,8 +322,8 @@ class RightBrainGraphStore:
 
     def get_entities_for_slot(self, user_id: str, slot_id: str,
                               *, newest_first: bool = False) -> list[RBEntity]:
-        """默认按名字排（稳定、便于展示）。``newest_first`` 按插入顺序倒排——
-        脑图要留几个席位给刚长出来的实体，按名字排的话新的排在哪全看它叫什么。"""
+        """Ordina per nome di default (stabile, facile da visualizzare). ``newest_first`` ordina inversamente per ordine di inserimento —
+        la mappa cerebrale deve riservare alcuni posti alle entità appena cresciute, ordinando per nome dove finiscono le nuove dipende solo da come si chiamano."""
         order = "rowid DESC" if newest_first else "name"
         with self._conn() as c:
             rows = c.execute(
@@ -333,8 +333,8 @@ class RightBrainGraphStore:
         return [_row_to_entity(r) for r in rows]
 
     def get_entity_by_name(self, user_id: str, slot_id: str, name: str) -> RBEntity | None:
-        """精确按名字查（只读，不创建）——给检索用，不像 get_or_create_entity
-        那样在没查到时顺手建一个空的。"""
+        """Cerca precisa per nome (sola lettura, non crea) — per il retrieval, a differenza di get_or_create_entity
+        che ne crea uno vuoto quando non trova nulla."""
         with self._conn() as c:
             row = c.execute(
                 "SELECT * FROM rb_entities WHERE user_id=? AND slot_id=? AND name=?",

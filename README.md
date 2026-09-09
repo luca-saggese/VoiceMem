@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <a href="https://xzf-thu.github.io/VoiceMem/">项目主页 🌐</a> /
-  <a href="https://arxiv.org/pdf/2608.26005">技术报告 📖</a> /
+  <a href="https://xzf-thu.github.io/VoiceMem/">Pagina del progetto 🌐</a> /
+  <a href="https://arxiv.org/pdf/2608.26005">Report tecnico 📖</a> /
   <a href="https://huggingface.co/zhifeixie/VoiceMem_Default_Models_Env">VoiceMem Utils 🤗</a> /
   <a href="https://huggingface.co/zhifeixie/VoiceMem_MF_Qwen3_6_35B_A3B_Qlora">VoiceMem Model Families 🤗</a> /
   <a href="https://huggingface.co/datasets/zhifeixie/VoiceMem-ChatMem400k">ChatMem-400K 🤗</a>
@@ -291,7 +291,7 @@ python examples/03_simple_agent_with_voicemem_memory.py
 Per usare il tuo modello, sostituisci il passaggio di generazione: la parte relativa alla memoria resta invariata.
 
 ```python
-def my_reply(text, memory_context):        # 同步函数也可以，会自动丢线程
+def my_reply(text, memory_context):        # anche le funzioni sincrone funzionano, verranno automaticamente girate in un thread
     return my_model.generate(system=memory_context, user=text)
 
 vm = VoiceMem(reply=my_reply)
@@ -341,7 +341,7 @@ python evaluation/run.py \
     --data data/locomo.json
 ```
 
-示例结果：
+Risultato di esempio:
 
 ```text
 LoCoMo: 10 conversations · 152 questions
@@ -377,10 +377,10 @@ Per il protocollo completo di valutazione e le istruzioni per aggiungere un nuov
 
 Ringraziamo i seguenti eccellenti progetti open source:
 
-* [mem0](https://github.com/mem0ai/mem0) — 向量记忆引擎
-* [FunASR](https://github.com/modelscope/FunASR) — 基于 `paraformer-zh-streaming` 的流式 ASR
-* [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) — Silero VAD、3D-Speaker 说话人验证，以及备用流式 ASR
-* [intfloat/multilingual-e5](https://huggingface.co/intfloat/multilingual-e5-small) — 本地 Embedding 和 Slot 分类
+* [mem0](https://github.com/mem0ai/mem0) — Motore di memoria vettoriale
+* [FunASR](https://github.com/modelscope/FunASR) — ASR streaming basato su `paraformer-zh-streaming`
+* [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) — Silero VAD, verifica del parlante 3D-Speaker e ASR streaming di riserva
+* [intfloat/multilingual-e5](https://huggingface.co/intfloat/multilingual-e5-small) — Embedding locale e classificazione Slot
 
 VoiceMem usa inoltre le API OpenAI per le funzionalità Chat, TTS e Realtime.
 

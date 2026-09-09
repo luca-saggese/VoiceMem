@@ -1,15 +1,15 @@
-"""数据集适配器：每个 benchmark 一个文件，只管两件事——怎么读、怎么判分。
+"""Adattatore dataset: un file per ogni benchmark, si occupa solo di due cose — come leggere e come valutare.
 
-中间那段（逐轮 ingest → 每题 search → 拿记忆作答）对所有数据集完全相同，
-写在 run.py 里，这样不同 benchmark 的数字才有可比性。
+La parte centrale (ingest turno per turno → search per domanda → risposta con memoria) è identica per tutti i dataset,
+scritta in run.py, così i numeri dei diversi benchmark sono comparabili.
 
-加一个新 benchmark = 在这个目录加一个文件，实现下面两个函数，再登记到 DATASETS：
+Aggiungere un nuovo benchmark = aggiungere un file in questa directory, implementare queste due funzioni, e registrarle in DATASETS:
 
-    def load(path: str) -> list[Conversation]      # 读成统一结构
-    def score(q: Question, answer: str, judge) -> Score   # 判这道题对不对
+    def load(path: str) -> list[Conversation]      # leggi in struttura unificata
+    def score(q: Question, answer: str, judge) -> Score   # valuta se questa domanda è corretta
 
-judge 由 run.py 注入，签名 ``judge(prompt: str) -> str``——各数据集判分口径不同
-（有的比对标准答案，有的过 rubric），但用的是同一个裁判模型。
+Il judge viene iniettato da run.py, firma ``judge(prompt: str) -> str`` — il criterio di valutazione varia tra dataset
+(alcuni confrontano con la risposta standard, altri usano un rubric), ma tutti usano lo stesso modello judge.
 """
 from dataclasses import dataclass, field
 

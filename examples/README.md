@@ -1,18 +1,18 @@
 # examples
 
-六个能直接跑的例子，从「当记忆库用」到「接 Realtime 语音模型」。
+Sei esempi eseguibili direttamente, da "usare come database di memoria" a "integrare con modelli vocali Realtime".
 
 ```bash
 pip install voicemem
 export OPENAI_API_KEY=sk-...
 ```
 
-| | 干什么 | 额外要什么 |
+| | Cosa fa | Cosa serve in più |
 |---|---|---|
-| [`01_memory.py`](01_memory.py) | 存和查 —— 最小用法 | 音频那半段要 `bash scripts/download_models.sh` |
-| [`02_streaming.py`](02_streaming.py) | 流式接口：喂音频块，看每一轮算出了什么 | 同上 |
-| [`03_simple_agent_with_voicemem_memory.py`](03_simple_agent_with_voicemem_memory.py) | 完整语音 agent：边听边取记忆、说话时能被打断 | 一个麦克风 |
-| [`04_all_local_l40s.py`](04_all_local_l40s.py) | 全开源组件，一张 L40S 流式跑起来，全程不出机器 | 一个本机 vLLM + `pip install voxcpm` |
+| [`01_memory.py`](01_memory.py) | Memorizza e cerca — uso minimo | Per la metà audio serve `bash scripts/download_models.sh` |
+| [`02_streaming.py`](02_streaming.py) | Interfaccia streaming: fornisci blocchi audio, vedi cosa calcola ogni turno | Come sopra |
+| [`03_simple_agent_with_voicemem_memory.py`](03_simple_agent_with_voicemem_memory.py) | Agent vocale completo: ascolta e recupera memoria mentre parla, può essere interrotto | Un microfono |
+| [`04_all_local_l40s.py`](04_all_local_l40s.py) | Tutti componenti open source, su una L40S funziona tutto in streaming senza uscire dalla macchina | Un vLLM locale + `pip install voxcpm` |
 | [`05_realtime_gpt_qwen.py`](05_realtime_gpt_qwen.py) | 接 gpt-realtime / qwen-omni-realtime，记忆随 response 注入 | 什么都不用装（都在 base 依赖里） |
 | [`06_mic_memory.py`](06_mic_memory.py) | **只听不答**：麦克风 → 转写 → 检索记忆。没有 LLM、没有 TTS | 一个麦克风 |
 

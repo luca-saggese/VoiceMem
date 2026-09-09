@@ -1,4 +1,4 @@
-"""右脑情绪图记忆：异常情绪 episode、实体/主题节点与情绪反应边。"""
+"""Memoria del grafo emotivo del cervello destro: episode di emozioni anomale, nodi entità/tipo e archi di reazione emotiva."""
 
 from __future__ import annotations
 
@@ -101,11 +101,11 @@ class EmotionGraphMemoryStoreConfig:
 
 
 class EmotionGraphMemoryStore:
-    """本地 SQLite 情绪图。
+    """Grafo emotivo SQLite locale.
 
-    图形态：
-    User -[EXPERIENCED]-> EmotionEpisode（标记异常轮次）
-    User -[EMOTIONAL_REACTION_TO]-> Topic/Event/Entity（用户对某对象的情绪反应）
+    Forma del grafo:
+    User -[EXPERIENCED]-> EmotionEpisode (marca turni anomali)
+    User -[EMOTIONAL_REACTION_TO]-> Topic/Event/Entity (reazione emotiva dell'utente verso un oggetto)
     """
 
     def __init__(
@@ -115,7 +115,7 @@ class EmotionGraphMemoryStore:
         db_path: str | Path | None = None,
     ) -> None:
         if config is not None and db_path is not None:
-            raise ValueError("请只传 EmotionGraphMemoryStoreConfig 或 db_path 其一")
+            raise ValueError("Passa solo uno tra EmotionGraphMemoryStoreConfig o db_path")
         cfg = config or EmotionGraphMemoryStoreConfig(db_path=db_path)
         raw = cfg.db_path
         self._path = (
@@ -210,7 +210,7 @@ class EmotionGraphMemoryStore:
         turn: TurnEmotionRecord,
         attribution: EmotionAttribution,
     ) -> EmotionGraphEpisode:
-        """将一次异常归因写入 episode 与情绪图边。"""
+        """Scrive una singola attribuzione anomala in episode e archi del grafo emotivo."""
         if attribution.emotion is None:
             attribution.emotion = EmotionSignal(
                 label="negative",
@@ -428,7 +428,7 @@ class EmotionGraphMemoryStore:
         )
 
     def has_episodes(self, *, user_id: str) -> bool:
-        """是否已有异常轮 episode（用于首轮归因前跳过空图检索）。"""
+        """Se ci sono già episode di turni anomali (per saltare la ricerca su grafo vuoto prima della prima attribuzione)."""
         self._ensure_schema()
         with self._conn() as c:
             row = c.execute(
@@ -458,7 +458,7 @@ class EmotionGraphMemoryStore:
         current_vad: VAD | None = None,
         limit: int = 5,
     ) -> list[EmotionGraphSearchHit]:
-        """按实体/主题名称检索历史情绪边。"""
+        """Recupera archi emotivi storici per nome entità/tipo."""
         self._ensure_schema()
         terms = [normalize_emotion_node_name(t) for t in query_terms if t.strip()]
         if not terms:

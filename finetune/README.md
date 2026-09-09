@@ -1,75 +1,75 @@
 # finetune
 
-训一个自己的 VoiceMem 回复 adapter。
+Addestra il tuo adapter di risposta VoiceMem.
 
 ```bash
-pip install ms-swift==4.5.2 bitsandbytes    # torch 按自己的平台装
-python finetune/train.py            # 先拿自带的 5 条样例把流程走通
+pip install ms-swift==4.5.2 bitsandbytes    # installa torch secondo la tua piattaforma
+python finetune/train.py            # prima fai girare la procedura con i 5 esempi inclusi
 python finetune/train.py --data data/train.jsonl
 ```
 
-默认超参写在 `finetune/utils.py`（`BASE` / `ADAPTER` / `TRAIN`），跟已发布 adapter
-那次训练一致，**照默认跑 = 复现同一次训练**（base `Qwen/Qwen3.6-35B-A3B`，
-LoRA rank 32 / alpha 64，4bit）。
+Gli iperparametri default sono scritti in `finetune/utils.py` (`BASE` / `ADAPTER` / `TRAIN`), coerenti con
+quella training dell'adapter pubblicato, **eseguire con default = riprodurre la stessa training** (base `Qwen/Qwen3.6-35B-A3B`,
+LoRA rank 32 / alpha 64, 4bit).
 
-## 文件
+## File
 
 | | |
 |---|---|
-| `train.py` | 训练入口，ms-swift 的 `sft_main` |
-| `eval.py` | 拿训好的 adapter 在数据上跑一遍，逐条打印 `ref` / `pred` |
-| `dataset.py` | 读 JSONL 并**逐条校验**格式，不合规直接报第几条第几句 |
-| `utils.py` | 默认超参、四种 system prompt、warmup 换算 |
-| `data/sample.jsonl` | 5 条样例 |
+| `train.py` | Entry point training, `sft_main` di ms-swift |
+| `eval.py` | Esegui l'adapter addestrato sui dati, stampa riga per riga `ref` / `pred` |
+| `dataset.py` | Legge JSONL e **valida formato riga per riga**, se non conforme segnala direttamente quale riga e frase |
+| `utils.py` | Iperparametri default, quattro system prompt, calcolo warmup |
+| `data/sample.jsonl` | 5 esempi |
 
-## 数据格式
+## Formato dati
 
 ```json
 {
   "messages": [
-    {"role": "system",    "content": "<按 category/lang 选，见下>"},
-    {"role": "user",      "content": "我的猫叫什么名字来着\n\nMEMORY CONTEXT (things you remember about the user):\n- [2023-05-08] 用户养了一只英短猫，名字叫墨墨，今年三岁。"},
-    {"role": "assistant", "content": "叫墨墨呀，三岁的英短。"}
+    {"role": "system",    "content": "<seleziona in base a category/lang, vedi sotto>"},
+    {"role": "user",      "content": "Come si chiama il mio gatto?\n\nMEMORY CONTEXT (things you remember about the user):\n- [2023-05-08] L'utente ha un gatto British Shorthair di nome Momo, tre anni."},
+    {"role": "assistant", "content": "Si chiama Momo, un British Shorthair di tre anni."}
   ],
   "meta": {"lang": "zh", "category": "knowledge", "session_id": "s_0001", "turn": 1}
 }
 ```
-记忆块拼在**最后一轮的 user 里**，历史轮不带记忆。只有最后一句 assistant 算 loss
-（`loss_scale="last_round"`），历史轮不算。
+Il blocco memoria viene concatenato nell'**user dell'ultimo turno**, i turni storici non hanno memoria. Solo l'ultima frase assistant calcola il loss
+(`loss_scale="last_round"`), i turni storici no.
 
-## 常用参数
+## Parametri comuni
 
 ```bash
 python finetune/train.py --data data/train.jsonl \
     --out out/my-adapter --epochs 3 --lr 1e-4 --no-4bit
 ```
 
-| | | 默认 |
+| | | Default |
 |---|---|---|
-| `--data` | 训练数据 | `finetune/data/sample.jsonl` |
-| `--out` | 输出目录 | `out/voicemem-qlora` |
-| `--base` | 基座模型 | `Qwen/Qwen3.6-35B-A3B` |
-| `--rank` / `--alpha` | LoRA 秩 / alpha | 32 / 64 |
-| `--epochs` / `--lr` | 轮数 / 学习率 | 2 / 2e-4 |
-| `--max-len` | 最大序列长度 | 2048 |
-| `--no-4bit` | 不做 4bit 量化（显存够才用） | 默认开 4bit |
+| `--data` | Dati training | `finetune/data/sample.jsonl` |
+| `--out` | Directory output | `out/voicemem-qlora` |
+| `--base` | Modello base | `Qwen/Qwen3.6-35B-A3B` |
+| `--rank` / `--alpha` | Rango LoRA / alpha | 32 / 64 |
+| `--epochs` / `--lr` | Epoch / learning rate | 2 / 2e-4 |
+| `--max-len` | Lunghezza sequenza massima | 2048 |
+| `--no-4bit` | Nessuna quantizzazione 4bit (usa solo se hai memoria VRAM sufficiente) | 4bit attivo di default |
 
-**换基座必须改 `target_regex`**——它是 `utils.py` 里 `ADAPTER["target_modules"]`，
-按 Qwen3.6-35B-A3B 的模块命名写死的。不确定就改成 `all-linear`。
+**Cambiando il modello base devi modificare `target_regex`** — è `ADAPTER["target_modules"]` in `utils.py`,
+scritto hardcoded secondo la denominazione dei moduli di Qwen3.6-35B-A3B. Se non sei sicuro, cambia con `all-linear`.
 
-## 评估
+## Valutazione
 
 ```bash
 python finetune/eval.py --adapter out/voicemem-qlora --out preds.jsonl
 ```
 
-逐条打印 `question` / `ref` / `pred` / `meta`，`--out` 存成 JSONL。
-温度固定 0，方便复现比较。
+Stampa riga per riga `question` / `ref` / `pred` / `meta`, `--out` salva come JSONL.
+Temperatura fissa a 0, utile per riprodurre e confrontare.
 
-跑记忆检索本身的指标见 [`evaluation/`](../evaluation/)。
+Per le metriche del retrieval memoria stesso vedi [`evaluation/`](../evaluation/).
 
-## 说明
+## Note
 
-- **训练数据不在这个仓库**。公开前要补齐来源、许可、同意状态和预处理说明。
-- adapter 不能当独立模型分发，基座的许可和获取条件请自行确认。
-- 多卡训练时 `utils.warmup_steps()` 是按单进程算的，要再除以卡数。
+- **I dati di training non sono in questo repository**. Prima della pubblicazione vanno aggiunti origine, licenza, stato del consenso e spiegazioni del preprocessing.
+- L'adapter non può essere distribuito come modello indipendente, verifica autonomamente la licenza del modello base e le condizioni di accesso.
+- Per il training multi-GPU `utils.warmup_steps()` è calcolato per singolo processo, va diviso ulteriormente per numero di GPU.

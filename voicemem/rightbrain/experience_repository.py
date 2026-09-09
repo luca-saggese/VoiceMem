@@ -1,11 +1,11 @@
-"""Experience Repository：右脑检索 + 写入的高层接口。
+"""Experience Repository: interfaccia di alto livello per retrieval + scrittura del cervello destro.
 
-检索顺序（spec 第9节）：
-  1. response_experience    — 最高优先级，回应成败教训
-  2. heartnote                   — 情境情绪规律
-  3. user_interaction_profile    — 全局用户风格
+Ordine di retrieval (sezione 9 dello spec):
+  1. response_experience    — massima priorità, lezioni da risposte riuscite/sbagliate
+  2. heartnote                   — pattern emotivi contestuali
+  3. user_interaction_profile    — stile globale dell'utente
 
-写入：upsert_experience + link_anchors
+Scrittura: upsert_experience + link_anchors
 """
 from __future__ import annotations
 
@@ -23,12 +23,12 @@ _DEFAULT_DB_NAME = "right_brain.sqlite"
 
 
 class ExperienceRepository:
-    """右脑 Experience Layer 的完整入口。
+    """Punto di ingresso completo del livello Experience del cervello destro.
 
-    用法（最小）::
+    Utilizzo (minimo)::
 
         repo = ExperienceRepository.create(db_path="memory/right_brain.sqlite")
-        plan = repo.build_query_plan("Lang 上次的方案", user_id="u1")
+        plan = repo.build_query_plan("La soluzione precedente di Lang", user_id="u1")
         ctx  = repo.retrieve(plan)
         print(ctx.to_prompt_block())
     """
@@ -64,7 +64,7 @@ class ExperienceRepository:
         emotion: str | None = None,
         context: str | None = None,
     ) -> MemoryQueryPlan:
-        """``context``：agent 上一句（用户正在回应它），只参与锚点、不进 clean_text。"""
+        """``context``: frase precedente dell'agent (l'utente ci sta rispondendo), partecipa solo agli anchor, non entra in clean_text."""
         return self._router.build_query_plan(
             query, user_id, signals=signals, entities=entities, emotion=emotion,
             context=context,
@@ -79,13 +79,13 @@ class ExperienceRepository:
         experience_limit: int = 3,
         pattern_limit: int = 3,
     ) -> RightBrainContext:
-        """三类记忆并行检索，按优先级组合返回。"""
+        """Retrieval parallelo delle tre classi di memoria, restituite combinate per priorità."""
         anchors = plan.anchors
         uid     = plan.user_id
         sigs    = plan.current_signals
 
-        # 1. Response Experience（失败/成功经验）
-        #    dissatisfaction/correction 时优先级更高
+        # 1. Response Experience (esperienze di successo/fallimento)
+        #    priorità più alta quando dissatisfaction/correction
         exp_limit = experience_limit + (1 if sigs.dissatisfaction_signal or sigs.correction_signal else 0)
         experiences = self._store.search_by_anchors(
             uid, anchors, memory_class="response_experience", limit=exp_limit,
@@ -96,14 +96,14 @@ class ExperienceRepository:
             uid, anchors, memory_class="heartnote", limit=pattern_limit,
         )
 
-        # user_interaction_profile 由前刺层 UserProfileStore 独立管理，不在此检索
+        # user_interaction_profile è gestito indipendentemente dal livello pre-stimolo UserProfileStore, non retrieval qui
         return RightBrainContext(
             response_experiences=experiences,
             situation_patterns=patterns,
             current_signals=sigs,
         )
 
-    # ── Write ─────────────────────────────────────────────────────────────────
+    # ── Scrittura ─────────────────────────────────────────────────────────────────
 
     def write_experience(
         self,
@@ -122,10 +122,10 @@ class ExperienceRepository:
         memory_id: str | None = None,
         created_at: str | None = None,
     ) -> RightBrainMemory:
-        """写入一条右脑记忆并挂 anchors。
+        """Scrivi una memoria del cervello destro e aggancia gli anchors.
 
-        ``created_at``：事件真实发生时间（回填/benchmark 场景必传，否则渲染出的
-        日期是写入墙钟，temporal 类问题会被带偏；见 store.upsert_memory）。
+        ``created_at``: tempo reale dell'evento (obbligatorio per backfill/scenari benchmark, altrimenti la data renderizzata
+        è il wall clock di scrittura e le domande di tipo temporale verrebbero fuorviate; vedi store.upsert_memory).
         """
         mem = self._store.upsert_memory(
             user_id, memory_class, content,
@@ -141,7 +141,7 @@ class ExperienceRepository:
             self._store.link_anchor(mem.id, user_id, anchor)
         return mem
 
-    # ── Convenience helpers ───────────────────────────────────────────────────
+    # ── Helper pratici ───────────────────────────────────────────────────
 
     def write_response_experience(
         self,
@@ -155,7 +155,7 @@ class ExperienceRepository:
         evidence_turn_ids: list[str] | None = None,
         **kwargs,
     ) -> RightBrainMemory:
-        """快捷写入 response_experience，失败经验 priority 自动拉高。"""
+        """Scrittura rapida di response_experience, la priority delle esperienze fallite viene alzata automaticamente."""
         priority = kwargs.pop("priority", 0.9 if failed else 0.6)
         meta = dict(metadata or {})
         if failed:
@@ -176,7 +176,7 @@ class ExperienceRepository:
         confidence: float = 0.8,
         **kwargs,
     ) -> RightBrainMemory:
-        """快捷写入情感情境模式。"""
+        """Scrittura rapida di pattern emotivo contestuale."""
         return self.write_experience(
             user_id, "heartnote", content, anchors,
             condition=condition, confidence=confidence, **kwargs,

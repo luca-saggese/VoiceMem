@@ -1,23 +1,21 @@
-"""左脑组件 LeftBrain。
+"""Componente cervello sinistro LeftBrain.
 
-从 VoiceMem 上帝类里抽出来的**左脑那一整块**——认知图 slot 过滤 / 实体缩窄 /
-时间类问题扩候选 / 向量排序 / 查询分类（含动态 slot 下钻）/ LLM 打 slot 标签 /
-slot→entity 图层写入 / 子图激活记账与 checkpoint / schema 描述刷新 / 冷记忆归档，
-以及围绕它们的左脑侧懒加载单例（repo / extractor / dynamic_slot_store /
-graph_entity_store / subgraph_manager）。
+Estratta dall'oggetto "dio" VoiceMem — **l'intero lato sinistro del cervello**: filtraggio slot della mappa cognitiva / restringimento entità /
+estensione candidati per domande temporali / ordinamento vettoriale / classificazione query (con discesa dinamica slot) / etichettatura slot LLM /
+scrittura layer slot→entity / contabilità attivazione sottografo e checkpoint / aggiornamento descrizione schema / archiviazione memoria fredda,
+e i singleton lazy-loading sul lato sinistro del cervello attorno ad essi (repo / extractor / dynamic_slot_store /
+graph_entity_store / subgraph_manager).
 
-参考 mem0 的组合模式：
-  * **组件自持零件**——5 个左脑侧懒加载单例（repo / extractor /
-    dynamic_slot_store / graph_entity_store / subgraph_manager）连同它们与宿主
-    共享的缓存和锁，都在这个组件内部，engine 不再持有各自的 _get_*。
-  * **依赖显式注入**——凡是需要用到"文本 embedding / LLM(JSON) / LLM(text) /
-    可注入分类器 / 会话追踪器"这些**跨域或运行时**能力的地方，一律在 __init__
-    里以 getter/函数引用注入（懒加载语义保持不变），组件内部通过 self._dep() 调用。
+Modello compositivo ispirato a mem0:
+  * **Componenti autocontenuti** — 5 singleton lazy-loading sul lato sinistro del cervello (repo / extractor /
+    dynamic_slot_store / graph_entity_store / subgraph_manager) insieme alle loro cache e lock condivisi con l'host, tutto interno a questo componente, l'engine non mantiene più i propri _get_*.
+  * **Iniezione esplicita delle dipendenze** — Ovunque servano capacità **cross-domain o runtime** come "embedding testo / LLM(JSON) / LLM(testo) /
+    classificatore iniettabile / tracciatore sessioni", vengono iniettati in __init__ come getter/riferimenti funzione (il semantic lazy-loading rimane invariato), il componente li chiama internamente tramite self._dep().
 
-logic 一字不改：方法体原样搬运，只改"怎么拿依赖"。
+La logica è identica: i corretti dei metodi sono stati spostati così com'erano, si è cambiato solo "come ottenere le dipendenze".
 
-brain.py 不 import engine（避免循环）——模块级辅助（_search_mode / _pool_mode /
-_RESCUE_K 等）随本模块落地，engine 反向从这里 import。
+brain.py non importa engine (evita cicli) — le funzioni di aiuto a livello di modulo (_search_mode / _pool_mode /
+_RESCUE_K ecc.) risiedono con questo modulo, engine importa da qui.
 """
 
 from __future__ import annotations

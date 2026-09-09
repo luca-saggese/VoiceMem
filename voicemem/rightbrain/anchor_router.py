@@ -1,12 +1,12 @@
-"""Anchor Router：把用户输入和 Preprocessor 信号转换为 MemoryQueryPlan。
+"""Anchor Router: converte l'input utente e i segnali del Preprocessor in MemoryQueryPlan.
 
-核心逻辑：
-  1. 复用左脑 CognitiveGraphStore 的 entity 匹配，不额外调 LLM
-  2. entity.entity_type → anchor_type（人 → person，项目 → project …）
-  3. entity_edges → entity_edge anchor（Boss给任务 比 Boss本人 更精准）
-  4. 无命中时加 user_self + global_style fallback
+Logica principale:
+  1. Riutilizza la corrispondenza entity di CognitiveGraphStore del cervello sinistro, senza chiamare LLM aggiuntivo
+  2. entity.entity_type → anchor_type (persona → person, progetto → project…)
+  3. entity_edges → anchor entity_edge (il compito dato dal Boss è più preciso del Boss stesso)
+  4. Nessun match → aggiunge fallback user_self + global_style
 
-不依赖右脑表，只读左脑 SQLite。
+Non dipende dalle tabelle del cervello destro, legge solo SQLite del cervello sinistro.
 """
 from __future__ import annotations
 
@@ -18,15 +18,15 @@ from .types import CurrentSignals, MemoryAnchor, MemoryQueryPlan
 if TYPE_CHECKING:
     from voicemem.leftbrain.cognitive_graph.store import CognitiveGraphStore
 
-# 左脑 EntityType.value → MemoryAnchor anchor_type
-# 原来这里按左脑的 SlotType（一套独立于 SlotV2 的 7 类 entity-category
-# taxonomy）映射；SlotType 已随 slot taxonomy 统一（改用 SlotV2 表示"生活
-# 领域"）被删除，而这里真正需要的一直是"这个实体是什么类型"——EntityType
-# 本来就直接表达这个，不需要再经过 slot 转译一层。
-# organization 并入 person（原 ENTITY_TYPE_TO_SLOT 里 ORGANIZATION 也是并入
-# people 槽位）；event 并入 knowledge（原映射同样把 EVENT 归到 knowledge）。
-# user/preference 类实体不在表里，走下面 .get(..., "knowledge") 的默认值，
-# 跟原来 SlotType 路径的兜底行为一致。
+# EntityType.value del cervello sinistro → anchor_type MemoryAnchor
+# Originariamente qui si mappava secondo SlotType del cervello sinistro (una tassonomia di 7 categorie entity-indipendente da SlotV2);
+# SlotType è stato eliminato con l'unificazione della tassonomia slot (ora usa SlotV2 per rappresentare "domini della vita"),
+# e ciò che serve davvero qui è sempre stato "che tipo di entità è questo" — EntityType
+# lo esprime direttamente, non serve più un livello di traduzione tramite slot.
+# organization fuso in person (in ENTITY_TYPE_TO_SLOT originale ORGANIZATION era anch'esso fuso nello
+# slot people); event fuso in knowledge (la mappa originale assegnava anche EVENT a knowledge).
+# Le entità di tipo user/preference non sono nella tabella, usano il default .get(..., "knowledge") qui sotto,
+# coerente con il comportamento di fallback del percorso SlotType originale.
 _ENTITY_TYPE_TO_ANCHOR: dict[str, str] = {
     "person":       "person",
     "organization": "person",
@@ -39,7 +39,7 @@ _ENTITY_TYPE_TO_ANCHOR: dict[str, str] = {
     "asset":        "asset",
 }
 
-# anchor_type → role 默认值
+# anchor_type → valore default role
 _ANCHOR_ROLE: dict[str, str] = {
     "person":       "subject",
     "user":         "global_profile",
@@ -53,7 +53,7 @@ _ANCHOR_ROLE: dict[str, str] = {
     "global_style": "global_profile",
 }
 
-# anchor_type → 检索权重
+# anchor_type → peso di retrieval
 _ANCHOR_WEIGHT: dict[str, float] = {
     "task":         1.0,
     "entity_edge":  0.9,
@@ -67,74 +67,73 @@ _ANCHOR_WEIGHT: dict[str, float] = {
     "global_style": 0.3,
 }
 
-_CANONICAL_EMOTIONS = {"焦虑", "悲伤", "委屈", "孤独", "纠结", "平静", "开心", "疲惫"}
+_CANONICAL_EMOTIONS = {"ansia", "tristezza", "ingiustizia", "solitudine", "confusione", "pace", "gioia", "stanchezza"}
 
 _EMOTION_KEYWORDS: list[tuple[str, str]] = [
-    # 焦虑系
-    ("焦虑", "焦虑"), ("压力", "焦虑"), ("紧张", "焦虑"), ("担忧", "焦虑"),
-    ("恐惧", "焦虑"), ("害怕", "焦虑"), ("不安", "焦虑"), ("慌", "焦虑"),
-    # 悲伤系
-    ("悲伤", "悲伤"), ("难过", "悲伤"), ("失落", "悲伤"), ("沮丧", "悲伤"),
-    ("伤心", "悲伤"), ("绝望", "悲伤"), ("崩溃", "悲伤"), ("难受", "悲伤"),
-    # 委屈系
-    # "生气/火大/烦躁" 以前一个都不在表里，而"压力"在焦虑系——于是"我好生气啊，
-    # 我的老板老压力我"被判成【焦虑】，明说了生气却认不出。表是按顺序匹配的，
-    # 所以这几个要排在"压力"之类的泛词之前才盖得住（见下面 _EMOTION_KEYWORDS
-    # 的用法）。
-    ("委屈", "委屈"), ("愤怒", "委屈"), ("气愤", "委屈"), ("不满", "委屈"),
-    ("生气", "委屈"), ("火大", "委屈"), ("恼火", "委屈"), ("烦躁", "委屈"),
-    ("憋屈", "委屈"), ("不公平", "委屈"),
-    # 孤独系
-    ("孤独", "孤独"), ("空虚", "孤独"), ("寂寞", "孤独"),
-    # 纠结系
-    ("纠结", "纠结"), ("矛盾", "纠结"), ("迷茫", "纠结"), ("犹豫", "纠结"),
-    # 平静系
-    ("平静", "平静"), ("淡然", "平静"), ("冷静", "平静"), ("释然", "平静"),
-    ("坦然", "平静"),
-    # 开心系
-    ("开心", "开心"), ("高兴", "开心"), ("兴奋", "开心"), ("期待", "开心"),
-    ("愉快", "开心"), ("满足", "开心"), ("自豪", "开心"), ("憧憬", "开心"),
-    ("感激", "开心"), ("轻松", "开心"), ("坚定", "开心"),
-    # 疲惫系
-    ("疲惫", "疲惫"), ("疲倦", "疲惫"), ("困倦", "疲惫"), ("无力", "疲惫"),
-    ("累", "疲惫"),
+    # ansia
+    ("ansia", "ansia"), ("stress", "ansia"), ("tensione", "ansia"), ("preoccupazione", "ansia"),
+    ("paura", "ansia"), ("spaventato", "ansia"), ("inquietudine", "ansia"), ("panico", "ansia"),
+    # tristezza
+    ("tristezza", "tristezza"), ("dispiacere", "tristezza"), ("perdita", "tristezza"), ("depressione", "tristezza"),
+    ("addolorato", "tristezza"), ("disperazione", "tristezza"), ("crollo", "tristezza"), ("malessere", "tristezza"),
+    # ingiustizia/arrabbiatura
+    # "arrabbiato/furioso/irritato" prima non erano nella tabella, mentre "stress" era nel gruppo ansia — quindi "sono così arrabbiato,
+    # il mio capo mi stressa sempre" veniva classificato come [ansia], diceva chiaramente arrabbiato ma non lo riconosceva. La tabella corrisponde in ordine,
+    # quindi questi devono venire prima di parole generiche come "stress" per sovrascriverle (vedi uso di _EMOTION_KEYWORDS qui sotto).
+    ("ingiustizia", "ingiustizia"), ("rabbia", "ingiustizia"), ("indignazione", "ingiustizia"), ("insoddisfazione", "ingiustizia"),
+    ("arrabbiato", "ingiustizia"), ("furioso", "ingiustizia"), ("infuriato", "ingiustizia"), ("irritato", "ingiustizia"),
+    ("sopraffare", "ingiustizia"), ("ingiusto", "ingiustizia"),
+    # solitudine
+    ("solitudine", "solitudine"), ("vuoto", "solitudine"), ("solitario", "solitudine"),
+    # confusione
+    ("confusione", "confusione"), ("contraddizione", "confusione"), ("smarrimento", "confusione"), ("esitazione", "confusione"),
+    # pace
+    ("pace", "pace"), ("distacco", "pace"), ("calma", "pace"), ("accettazione", "pace"),
+    ("serenità", "pace"),
+    # gioia
+    ("gioia", "gioia"), ("felicità", "gioia"), ("eccitazione", "gioia"), ("aspettativa", "gioia"),
+    ("piacere", "gioia"), ("soddisfazione", "gioia"), ("orgoglio", "gioia"), ("aspirazione", "gioia"),
+    ("gratitudine", "gioia"), ("leggerezza", "gioia"), ("determinazione", "gioia"),
+    # stanchezza
+    ("stanchezza", "stanchezza"), ("stanco", "stanchezza"), ("sonnolenza", "stanchezza"), ("impotenza", "stanchezza"),
+    ("esausto", "stanchezza"),
 ]
 
-# 英文版——VoiceMem 中英文都要支持，emotion 标签不能只认中文关键词，
-# 否则纯英文场景（如 ASR/TTS 生成的英文 emotion_tag）全部误判成"平静"。
+# Versione inglese — VoiceMem supporta sia cinese che inglese, i tag emotion non possono riconoscere solo parole chiave cinesi,
+# altrimenti in scenari puramente inglesi (es. emotion_tag generati da ASR/TTS in inglese) verrebbero tutti classificati erroneamente come "pace".
 _EMOTION_KEYWORDS_EN: list[tuple[str, str]] = [
-    # anxious
-    ("anxious", "焦虑"), ("anxiety", "焦虑"), ("nervous", "焦虑"), ("worried", "焦虑"),
-    ("worry", "焦虑"), ("stressed", "焦虑"), ("stress", "焦虑"), ("tense", "焦虑"),
-    ("fearful", "焦虑"), ("afraid", "焦虑"), ("scared", "焦虑"), ("panicked", "焦虑"),
-    ("panic", "焦虑"), ("uneasy", "焦虑"), ("apprehensive", "焦虑"),
-    # sad
-    ("sad", "悲伤"), ("sadness", "悲伤"), ("upset", "悲伤"), ("depressed", "悲伤"),
-    ("disappointed", "悲伤"), ("heartbroken", "悲伤"), ("miserable", "悲伤"),
-    ("dejected", "悲伤"), ("despair", "悲伤"), ("sorrowful", "悲伤"), ("grief", "悲伤"),
-    # wronged / angry
-    ("wronged", "委屈"), ("angry", "委屈"), ("anger", "委屈"), ("mad", "委屈"),
-    ("furious", "委屈"), ("irritated", "委屈"), ("annoyed", "委屈"), ("frustrated", "委屈"),
-    ("resentful", "委屈"), ("indignant", "委屈"), ("unfair", "委屈"), ("bitter", "委屈"),
-    # lonely
-    ("lonely", "孤独"), ("loneliness", "孤独"), ("isolated", "孤独"), ("empty", "孤独"),
-    ("alone", "孤独"),
-    # conflicted
-    ("conflicted", "纠结"), ("torn", "纠结"), ("confused", "纠结"), ("uncertain", "纠结"),
-    ("hesitant", "纠结"), ("ambivalent", "纠结"), ("indecisive", "纠结"), ("perplexed", "纠结"),
-    ("lost", "纠结"),
-    # calm
-    ("calm", "平静"), ("relaxed", "平静"), ("peaceful", "平静"), ("composed", "平静"),
-    ("serene", "平静"), ("settled", "平静"), ("neutral", "平静"),
-    # happy
-    ("happy", "开心"), ("happiness", "开心"), ("joy", "开心"), ("joyful", "开心"),
-    ("excited", "开心"), ("excitement", "开心"), ("glad", "开心"), ("pleased", "开心"),
-    ("delighted", "开心"), ("proud", "开心"), ("grateful", "开心"), ("thankful", "开心"),
-    ("relieved", "开心"), ("hopeful", "开心"), ("cheerful", "开心"), ("satisfied", "开心"),
-    ("content", "开心"), ("amused", "开心"),
-    # tired
-    ("tired", "疲惫"), ("exhausted", "疲惫"), ("fatigue", "疲惫"), ("fatigued", "疲惫"),
-    ("weary", "疲惫"), ("drained", "疲惫"), ("sleepy", "疲惫"), ("worn out", "疲惫"),
+    # ansia
+    ("anxious", "ansia"), ("anxiety", "ansia"), ("nervous", "ansia"), ("worried", "ansia"),
+    ("worry", "ansia"), ("stressed", "ansia"), ("stress", "ansia"), ("tense", "ansia"),
+    ("fearful", "ansia"), ("afraid", "ansia"), ("scared", "ansia"), ("panicked", "ansia"),
+    ("panic", "ansia"), ("uneasy", "ansia"), ("apprehensive", "ansia"),
+    # tristezza
+    ("sad", "tristezza"), ("sadness", "tristezza"), ("upset", "tristezza"), ("depressed", "tristezza"),
+    ("disappointed", "tristezza"), ("heartbroken", "tristezza"), ("miserable", "tristezza"),
+    ("dejected", "tristezza"), ("despair", "tristezza"), ("sorrowful", "tristezza"), ("grief", "tristezza"),
+    # ingiustizia / rabbia
+    ("wronged", "ingiustizia"), ("angry", "ingiustizia"), ("anger", "ingiustizia"), ("mad", "ingiustizia"),
+    ("furious", "ingiustizia"), ("irritated", "ingiustizia"), ("annoyed", "ingiustizia"), ("frustrated", "ingiustizia"),
+    ("resentful", "ingiustizia"), ("indignant", "ingiustizia"), ("unfair", "ingiustizia"), ("bitter", "ingiustizia"),
+    # solitudine
+    ("lonely", "solitudine"), ("loneliness", "solitudine"), ("isolated", "solitudine"), ("empty", "solitudine"),
+    ("alone", "solitudine"),
+    # confusione
+    ("conflicted", "confusione"), ("torn", "confusione"), ("confused", "confusione"), ("uncertain", "confusione"),
+    ("hesitant", "confusione"), ("ambivalent", "confusione"), ("indecisive", "confusione"), ("perplexed", "confusione"),
+    ("lost", "confusione"),
+    # pace
+    ("calm", "pace"), ("relaxed", "pace"), ("peaceful", "pace"), ("composed", "pace"),
+    ("serene", "pace"), ("settled", "pace"), ("neutral", "pace"),
+    # gioia
+    ("happy", "gioia"), ("happiness", "gioia"), ("joy", "gioia"), ("joyful", "gioia"),
+    ("excited", "gioia"), ("excitement", "gioia"), ("glad", "gioia"), ("pleased", "gioia"),
+    ("delighted", "gioia"), ("proud", "gioia"), ("grateful", "gioia"), ("thankful", "gioia"),
+    ("relieved", "gioia"), ("hopeful", "gioia"), ("cheerful", "gioia"), ("satisfied", "gioia"),
+    ("content", "gioia"), ("amused", "gioia"),
+    # stanchezza
+    ("tired", "stanchezza"), ("exhausted", "stanchezza"), ("fatigue", "stanchezza"), ("fatigued", "stanchezza"),
+    ("weary", "stanchezza"), ("drained", "stanchezza"), ("sleepy", "stanchezza"), ("worn out", "stanchezza"),
 ]
 
 _EN_KEYWORD_RE: list[tuple[re.Pattern, str]] = [
@@ -144,22 +143,22 @@ _EN_KEYWORD_RE: list[tuple[re.Pattern, str]] = [
 
 
 def normalize_emotion_strict(emotion: str) -> str | None:
-    """Map a free-form emotion string (Chinese or English) to a canonical
-    label; return None when nothing matches.
+    """Mappa una stringa di emozione libera (cinese o inglese) a un'etichetta canonica;
+    restituisce None quando non corrisponde nulla.
 
-    锚点相关的调用方应该用这个版本：未识别的情绪词（guilty / jealous /
-    nostalgic…）以前一律被兜底成"平静"，再以最高权重(1.2)写进检索锚点——
-    等于往查询里注入一个高权重的错误信号。识别不出就不加 emotion 锚点，
-    比加一个错的强。"""
+    I chiamanti legati agli anchor dovrebbero usare questa versione: le parole emotive non riconosciute (guilty / jealous /
+    nostalgic…) prima venivano tutte fallbackate su "pace", poi scritte negli anchor di retrieval con il peso più alto (1.2) —
+    equivale a iniettare un segnale errato ad alto peso nella query. Se non riconosci, non aggiungere l'anchor emotion,
+    è meglio aggiungere uno sbagliato."""
     e = emotion.strip()
     if not e:
         return None
     if e in _CANONICAL_EMOTIONS:
         return e
-    # 按**词在句子里出现的位置**取最早的那个，不按表的顺序。
-    # 表的顺序是分组写的（焦虑系在前、委屈系在后），照表序匹配的话
-    # 「我好生气啊，我的老板老压力我」会先撞上"压力"→【焦虑】，而人开口第一个词
-    # 就是"生气"。人说话时最先说出来的情绪词通常就是主情绪。
+    # Prendi il primo per **posizione della parola nella frase**, non per ordine della tabella.
+    # L'ordine della tabella è scritto per gruppi (gruppo ansia prima, gruppo ingiustizia dopo), se si corrisponde secondo l'ordine della tabella
+    # "sono così arrabbiato, il mio capo mi stressa sempre" colpirebbe prima "stress" → [ansia], mentre la prima parola detta dalla persona
+    # è proprio "arrabbiato". La parola emotiva detta per prima durante il parlato è solitamente l'emozione principale.
     best = None
     for keyword, canonical in _EMOTION_KEYWORDS:
         i = e.find(keyword)
@@ -174,9 +173,9 @@ def normalize_emotion_strict(emotion: str) -> str | None:
 
 
 def normalize_emotion(emotion: str) -> str:
-    """Like normalize_emotion_strict, but falls back to 平静 for callers that
-    need a guaranteed canonical label (e.g. graph node naming)."""
-    return normalize_emotion_strict(emotion) or "平静"
+    """Come normalize_emotion_strict, ma fa fallback su pace per i chiamanti che
+    hanno bisogno di un'etichetta canonica garantita (es. denominazione nodo grafo)."""
+    return normalize_emotion_strict(emotion) or "pace"
 
 
 _STOP = {
@@ -190,9 +189,9 @@ _STOP = {
 
 
 class AnchorRouter:
-    """根据当前输入生成 MemoryQueryPlan。
+    """Genera MemoryQueryPlan dall'input corrente.
 
-    cognitive_store 可以为 None（此时只返回 fallback anchors）。
+    cognitive_store può essere None (in questo caso restituisce solo anchor fallback).
     """
 
     def __init__(
@@ -211,9 +210,9 @@ class AnchorRouter:
         emotion: str | None = None,
         context: str | None = None,
     ) -> MemoryQueryPlan:
-        """``context``：agent 上一句。用户这句往往要放回它里面才完整（"那算了"），
-        所以它提到的实体也进锚点，但降为 context 角色、权重减半——它是背景，
-        不是用户这轮的主语。clean_text 仍只是用户原话。"""
+        """``context``: frase precedente dell'agent. Questa frase dell'utente spesso deve essere inserita lì dentro per essere completa ("allora lasciamo stare"),
+        quindi le entità che menziona entrano anche negli anchor, ma degradate al ruolo context, peso dimezzato — è sfondo,
+        non il soggetto principale di questo turno dell'utente. clean_text rimane solo l'originale dell'utente."""
         anchors = self._build_anchors(
             query, user_id, hint_entities=entities, hint_emotion=emotion,
             context_text=context,
@@ -227,7 +226,7 @@ class AnchorRouter:
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
-    # agent 那句话里匹配到的实体，锚点权重打这个折（背景 < 用户这轮的主语）
+    # Le entità corrispondenti nella frase dell'agent subiscono questa riduzione del peso dell'anchor (sfondo < soggetto principale di questo turno dell'utente)
     _CONTEXT_WEIGHT_SCALE = 0.5
 
     def _build_anchors(self, query: str, user_id: str, hint_entities: list[str] | None = None,
@@ -239,15 +238,15 @@ class AnchorRouter:
         if self._store is not None:
             from voicemem.leftbrain.cognitive_graph.store import normalize_name
 
-            # 先扫用户那句：两边都提到的实体先被满权重占住，不会被背景那遍降下去
+            # Prima scansiona la frase dell'utente: le entità menzionate da entrambi i lati vengono prima occupate con peso pieno, non verranno abbassate dalla passata sfondo
             sources: list[tuple[str, float]] = [(query, 1.0)]
             if context_text and context_text.strip():
                 sources.append((context_text, self._CONTEXT_WEIGHT_SCALE))
 
             matched_entities: list[tuple[Any, float]] = []
-            all_ents = self._store.find_entities(user_id)   # 中文反查用，两遍共用一次查询
+            all_ents = self._store.find_entities(user_id)   # per reverse lookup cinese, le due passate condividono una query
             for text, scale in sources:
-                # 候选词：英文单词 + bigram（原有逻辑）
+                # Parole candidate: parole inglesi + bigram (logica originale)
                 raw_words = re.findall(r"\b\w{2,}\b", text.lower())
                 candidates = [w for w in raw_words if w not in _STOP]
                 for i in range(len(raw_words) - 1):
@@ -262,8 +261,8 @@ class AnchorRouter:
                             seen_ids.add(e.id)
                             matched_entities.append((e, scale))
 
-                # 中文反查：遍历所有实体名，检查是否出现在输入中
-                # （中文无空格分词，英文词边界正则对中文无效）
+                # Reverse lookup cinese: scorri tutti i nomi entity, controlla se appaiono nell'input
+                # (il cinese non ha spazi per il word splitting, le regex di confine parola inglese non funzionano per il cinese)
                 text_lower = text.lower()
                 for e in all_ents:
                     if e.id in seen_ids:
@@ -274,7 +273,7 @@ class AnchorRouter:
                         seen_ids.add(e.id)
                         matched_entities.append((e, scale))
 
-            # voice module 提供的 entities：直接用名字做 anchor（和 Ingest 写入一致）
+            # Entity fornite dal modulo voce: usa direttamente il nome come anchor (coerente con la scrittura Ingest)
             if hint_entities:
                 for name in hint_entities:
                     key = name.lower().strip()
@@ -294,16 +293,16 @@ class AnchorRouter:
                 anchors.append(MemoryAnchor(
                     anchor_type=anchor_type,
                     anchor_id=ent.id,
-                    # 只在 agent 那句里出现的：记 context，权重减半
+                    # Appare solo nella frase dell'agent: registra come context, peso dimezzato
                     role=("context" if scale < 1.0
                           else _ANCHOR_ROLE.get(anchor_type, "context")),
                     weight=_ANCHOR_WEIGHT.get(anchor_type, 0.5) * scale,
                     confidence=ent.confidence,
                 ))
-                # 右脑写入时实体锚点用的是 name.lower().strip()（core.py::Ingest 里的
-                # entity anchor_id 写法），不是左脑的 entity.id——两套ID体系不通。
-                # 这里额外补一个用同样规则归一化的 "entity" 锚点，
-                # 让模糊匹配到的实体也能查到当初写入时挂的锚点。
+                # Quando il cervello destro scrive, l'anchor entity usa name.lower().strip() (scrittura entity anchor_id in core.py::Ingest),
+                # non l'entity.id del cervello sinistro — due sistemi ID non comunicanti.
+                # Qui si aggiunge extra un anchor "entity" normalizzato con la stessa regola,
+                # così le entità trovate per corrispondenza fuzzy possono anche trovare l'anchor appeso durante la scrittura originale.
                 name_key = ent.name.lower().strip()
                 if name_key not in seen_ids:
                     seen_ids.add(name_key)
@@ -315,7 +314,7 @@ class AnchorRouter:
                         confidence=ent.confidence,
                     ))
 
-            # entity_edge anchors：命中 ≥2 个实体时，把它们之间的边也加进来
+            # Anchor entity_edge: quando ≥2 entità vengono trovate, aggiungi anche gli archi tra loro
             if len(matched_entities) >= 2:
                 entity_ids = [e.id for e, _ in matched_entities]
                 for e, _scale in matched_entities:
@@ -333,8 +332,8 @@ class AnchorRouter:
                                 confidence=edge.confidence,
                             ))
 
-        # emotion anchor：按当前情感检索过去的情感事件（最高权重）。
-        # strict 版：识别不出的情绪词不加锚点（而不是兜底成"平静"）。
+        # Anchor emotion: retrieval di eventi emotivi passati basati sull'emozione corrente (peso più alto).
+        # Versione strict: parole emotive non riconosciute non aggiungono anchor (invece di fallback su "pace").
         if hint_emotion:
             canonical = normalize_emotion_strict(hint_emotion)
             if canonical is not None:
@@ -346,7 +345,7 @@ class AnchorRouter:
                     confidence=1.0,
                 ))
 
-        # Fallback：user_self + global_style 始终加入（权重低）
+        # Fallback: user_self + global_style sempre aggiunti (peso basso)
         anchors.append(MemoryAnchor(
             anchor_type="user",
             anchor_id="user_self",

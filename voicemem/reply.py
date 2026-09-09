@@ -1,27 +1,27 @@
-"""回复层：核心交出 ``Turn`` 之后的那一步——两条路，一个口子。
+"""Layer di risposta: il passo dopo che il core ha consegnato il ``Turn`` — due percorsi, un'unica interfaccia.
 
-``voicemem/stream.py`` 是输入侧（音频 → 记忆），这里是输出侧（记忆 → 回复）。两条路：
+``voicemem/stream.py`` è il lato input (audio → memoria), qui è il lato output (memoria → risposta). Due percorsi:
 
-    # 路 A：用内置的（OpenAI 兼容 api，流式）
+    # Percorso A: usa quello integrato (API compatibile con OpenAI, streaming)
     vm = VoiceMem.from_config({"reply": {"provider": "openai",
                                          "config": {"model": "gpt-4o-mini"}}})
 
-    # 路 B：用自己的模型/函数
+    # Percorso B: usa il tuo modello/funzione
     vm = VoiceMem(reply=my_fn)
 
-两条路拿到的调用口完全一样::
+I due percorsi offrono la stessa interfaccia di chiamata::
 
-    answer = await vm.reply(turn)                      # 收全，返回整串
-    async for delta in vm.reply_stream(turn):  ...     # 流式，逐字吐
+    answer = await vm.reply(turn)                      # ricevi tutto, restituisce la stringa completa
+    async for delta in vm.reply_stream(turn):  ...     # streaming, carattere per carattere
 
-``my_fn`` 写成下面任意一种都行，``normalize()`` 会把它们统一成异步生成器::
+``my_fn`` può essere scritta in uno di questi modi, ``normalize()`` li unifica tutti in un async generator::
 
-    def       my_fn(text, memory_context) -> str          # 同步：自动丢线程，不阻塞事件循环
-    async def my_fn(text, memory_context) -> str          # 协程
-    async def my_fn(text, memory_context): yield delta    # 异步生成器（流式）
+    def       my_fn(text, memory_context) -> str          # sincrono: automaticamente girato in thread, non blocca l'event loop
+    async def my_fn(text, memory_context) -> str          # coroutine
+    async def my_fn(text, memory_context): yield delta    # async generator (streaming)
 
-**TTS 不在这里。** 回复层只产出文本；要出声用 ``voicemem/tts.py``——
-``speak_stream(vm.reply_stream(turn))`` 边生成边合成，见 examples/03_simple_agent_with_voicemem_memory.py。
+**TTS non è qui.** Il layer di risposta produce solo testo; per l'audio usa ``voicemem/tts.py`` —
+``speak_stream(vm.reply_stream(turn))`` sintetizza mentre genera, vedi examples/03_simple_agent_with_voicemem_memory.py.
 """
 from __future__ import annotations
 
@@ -30,13 +30,13 @@ import inspect
 import os
 from typing import AsyncIterator, Callable
 
-# memory_context 只是「记得关于用户的哪些事」，本身不含人设/风格要求，所以内置
-# provider 把它接在这句后面，而不是拿它整个当 system prompt。
-DEFAULT_SYSTEM = "你是语音助手，简短自然地回答。"
+# memory_context è solo "cosa ricordi dell'utente", non contiene richieste di personalità/stile di per sé, quindi il provider integrato
+# lo attacca dopo questa frase, invece di usarlo intero come system prompt.
+DEFAULT_SYSTEM = "Sei un assistente vocale, rispondi brevemente e naturalmente."
 
 
 def compose_system(memory_context: str, system: str | None = None) -> str:
-    """人设 + 记忆 → system prompt。两边都可能为空。"""
+    """Personalità + memoria → system prompt. Entrambi possono essere vuoti."""
     parts = [system or DEFAULT_SYSTEM]
     if memory_context:
         parts.append(memory_context)
@@ -45,10 +45,10 @@ def compose_system(memory_context: str, system: str | None = None) -> str:
 
 def openai_reply(model: str | None = None, api_key: str | None = None,
                  base_url: str | None = None, system: str | None = None) -> Callable:
-    """内置回复 provider：OpenAI 兼容 api，流式吐字。返回一个异步生成器函数。
+    """Provider di risposta integrato: API compatibile con OpenAI, output streaming. Restituisce una funzione async generator.
 
-    模型默认取 ``OPENAI_CHAT_MODEL``，再回落 ``gpt-4o-mini``。client 首次调用时才建，
-    ``import voicemem`` 不会因此要求有 key。
+    Il modello default usa ``OPENAI_CHAT_MODEL``, con fallback a ``gpt-4o-mini``. Il client viene creato solo alla prima chiamata,
+    ``import voicemem`` non richiede quindi una key."
     """
     client = None
 
@@ -75,11 +75,10 @@ def openai_reply(model: str | None = None, api_key: str | None = None,
 
 
 def normalize(fn: Callable) -> Callable:
-    """把任意形状的回复函数规格化成「异步生成器函数」这一种。
+    """Normalizza qualsiasi forma di funzione di risposta a un unico tipo: "funzione async generator".
 
-    同步函数走 ``asyncio.to_thread``——回复生成是秒级的，直接在事件循环里跑会卡住
-    读麦克风那条线。返回值若本身是异步可迭代对象（例如一个包装别人生成器的
-    lambda），照样按流式展开。
+    Le funzioni sincrone usano ``asyncio.to_thread`` — la generazione della risposta dura secondi, eseguirla direttamente nel event loop bloccherebbe
+    il thread di lettura del microfono. Se il valore di ritorno è esso stesso un oggetto asincronamente iterabile (es. un lambda che avvolge un generatore di altri), viene comunque espanso in streaming.
     """
     if inspect.isasyncgenfunction(fn):
         return fn
@@ -105,10 +104,10 @@ def normalize(fn: Callable) -> Callable:
 
 
 async def capture(deltas: AsyncIterator[str], on_done: Callable[[str], None]) -> AsyncIterator[str]:
-    """原样透传每个 delta，说完时把整句交给 ``on_done``。
+    """Pass-through di ogni delta così com'è, quando ha finito consegna la frase intera a ``on_done``.
 
-    agent 说的那半也该进记忆，但不该让调用方多写一行、也不能等收全再吐。
-    被打断时 ``finally`` 交出已吐出去的那部分——用户听到多少就记多少。
+    Anche la parte detta dall'agent dovrebbe entrare nella memoria, ma non si deve far scrivere una riga in più al chiamante, né aspettare di avere tutto per restituire.
+    Quando viene interrotto, ``finally`` consegna la parte già restituita — quanto sente l'utente viene salvato quanto basta.
     """
     parts: list[str] = []
     try:
@@ -120,7 +119,7 @@ async def capture(deltas: AsyncIterator[str], on_done: Callable[[str], None]) ->
 
 
 def unpack(turn_or_text, memory_context: str = "") -> tuple[str, str]:
-    """``vm.reply(turn)`` 的便利：Turn / StreamState 直接拆成 (text, memory_context)。"""
+    """Comodità per ``vm.reply(turn)``: Turn / StreamState viene decomposto direttamente in (text, memory_context)."""
     text = getattr(turn_or_text, "text", None)
     if text is not None and hasattr(turn_or_text, "memory_context"):
         return text, (memory_context or turn_or_text.memory_context)
