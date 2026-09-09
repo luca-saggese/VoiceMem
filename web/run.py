@@ -57,13 +57,9 @@ def _parse(argv):
     configured_base_url = os.environ.get("OPENAI_BASE_URL", "").strip().lower()
     default_mode = os.environ.get("DEMO_MODE")
     if not default_mode:
-        # OpenRouter e gli altri endpoint OpenAI-compatible normalmente espongono
-        # Chat Completions ma non il protocollo Realtime WebSocket di OpenAI.
-        default_mode = (
-            "realtime"
-            if not configured_base_url or "api.openai.com" in configured_base_url
-            else "llm_tts"
-        )
+        # CosyVoice è il percorso vocale predefinito: LLM text streaming → TTS
+        # locale. Realtime resta disponibile solo se richiesto esplicitamente.
+        default_mode = "llm_tts"
     p.add_argument("--mode", choices=["llm_tts", "realtime"],
                    default=default_mode,
                    help="回复控制流：realtime=OpenAI 原生语音（默认，体验最好）；"
@@ -988,7 +984,11 @@ CONFIG = {
     "reply": {
         "llm":      {"provider": "openai", "config": {"model": utils.CHAT_MODEL,
                                                       "system": _RT_PERSONA}},
-        "tts":      {"provider": utils.TTS_BACKEND, "config": {"model": utils.TTS_MODEL}},
+        "tts":      {"provider": "cosyvoice3", "config": {
+            "model": os.environ.get("VOICEMEM_COSYVOICE_MODEL", "models/tts/Fun-CosyVoice3-0.5B-2512"),
+            "ref_audio": os.environ.get("VOICEMEM_COSYVOICE_REF_AUDIO", ""),
+            "default_language": ARGS.lang,
+        }},
         "realtime": {"provider": "openai", "config": {"model": utils.RT_MODEL}},
     },
 }

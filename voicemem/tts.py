@@ -39,7 +39,7 @@ from voicemem.llm_config import resolve_model
 #: 兼容旧名字。真正的解析在 OpenAITTS.__init__ 里现算（见 llm_config）——
 #: 原来这里是 import 时读 env，先 import 后设 env 就静默不生效。
 TTS_MODEL = resolve_model(role="tts")
-TTS_BACKEND = os.environ.get("TTS_BACKEND", "openai")   # openai(api) | local | voxcpm
+TTS_BACKEND = os.environ.get("TTS_BACKEND", "cosyvoice3")   # cosyvoice3 | openai | local | voxcpm
 #: 音色。原来这个值写死在合成函数里，走 llm_tts 的用户想换只能改源码——
 #: 内置默认实现也该是可配的，不然「可替换」只剩换掉整个后端一条路。
 TTS_VOICE = os.environ.get("OPENAI_TTS_VOICE", "alloy")
@@ -351,6 +351,7 @@ class BreezeTTS(BaseTTS):
 #: provider 名 → 内置实现。``local`` 是 ``piper`` 的历史别名（TTS_BACKEND=local 一直
 #: 是这个意思），两个都留着。
 TTS_PROVIDERS = {
+    "cosyvoice3": None,
     "openai": OpenAITTS,
     "local":  PiperTTS,
     "piper":  PiperTTS,
@@ -375,6 +376,9 @@ def make_tts(provider: str | None = None, **cfg):
     """
     name = (provider or TTS_BACKEND).lower()
     cls = TTS_PROVIDERS.get(name)
+    if name == "cosyvoice3":
+        from voicemem.tts_cosyvoice import CosyVoice3TTS
+        cls = CosyVoice3TTS
     if cls is None:
         raise ValueError(f"未知的 tts.provider={provider!r}；"
                          f"可选：{' / '.join(sorted(set(TTS_PROVIDERS)))}")

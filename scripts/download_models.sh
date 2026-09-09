@@ -69,6 +69,15 @@ import sys
 from huggingface_hub import snapshot_download
 snapshot_download(repo_id="emotion2vec/emotion2vec_plus_base", local_dir=sys.argv[1])
 PY
+  echo "      CosyVoice3 TTS (FunAudioLLM/Fun-CosyVoice3-0.5B-2512)…"
+  python3 - "${DEST}/tts" <<'PY'
+import sys
+from huggingface_hub import snapshot_download
+snapshot_download(
+    repo_id="FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
+    local_dir=f"{sys.argv[1]}/Fun-CosyVoice3-0.5B-2512",
+)
+PY
 else
   # Scarica uno per uno da varie fonti ufficiali pubbliche (quando HF è inaccessibile, o si vogliono verificare origini e licenze)
   REL="https://github.com/k2-fsa/sherpa-onnx/releases/download"

@@ -20,6 +20,6 @@ def test_openrouter_defaults_to_llm_tts(monkeypatch):
     assert run.ARGS.mode == "llm_tts"
 
 
-def test_openai_defaults_to_realtime(monkeypatch):
+def test_openai_defaults_to_llm_tts(monkeypatch):
     run = _load_run(monkeypatch, "https://api.openai.com/v1")
-    assert run.ARGS.mode == "realtime"
+    assert run.ARGS.mode == "llm_tts"
