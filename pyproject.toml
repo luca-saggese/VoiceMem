@@ -53,6 +53,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+
+rtc = [
+    "av>=14",
+]
+
 # Per eseguire il nostro modello Qwen fine-tuned per le risposte (Qwen3.6-35B-A3B + adapter QLoRA).
 # I pesi non sono nel wheel, usa `bash scripts/download_models.sh --reply-adapter` per scaricarli.
 slm = [

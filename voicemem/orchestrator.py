@@ -33,6 +33,8 @@ from __future__ import annotations
 
 from voicemem.utils.common import space as _space
 
+import functools
+import inspect
 import os
 import time
 import re
@@ -64,17 +66,20 @@ from voicemem.rightbrain.brain import (
     _render_rb_directive,
 )
 from voicemem.utils.defaults import default_utils
+from voicemem.llm_config import resolve_api_key, resolve_base_url, resolve_model
 
 # 新增多少条记忆（左脑事实 + 右脑 heartnote）才巩固一次。见 Ingest() 里那段注释：
 # 巩固是把历史记忆重新概括，每轮跑既慢（7s）又没什么可总结的。session 结束时无论
 # 攒了多少都会清账，所以不会一直积着不处理。
 SHORT_TERM_MIN_MEMORIES = int(os.environ.get("VOICEMEM_ATTRIBUTION_MIN_MEMORIES", "20"))
 
-# 每个 mode 需要哪些 util（只加载这些）
+# 每个 mode 需要哪些 util（只加载这些）。
+# tts 不在任何一档里：核心链路只到文本为止，出声是可选的一层，谁要出声谁
+# utils.get("tts")——搁进来会让没装 piper/voxcpm 的用户在 warmup 就炸。
 _NEED = {
-    "left_brain_single": ["embedding", "schema", "entity", "memory_engine"],
-    "text_mode":         ["embedding", "schema", "entity", "emotion", "memory_engine"],
-    "multi_modal":       ["embedding", "schema", "entity", "emotion", "voiceprint", "asr", "memory_engine"],
+    "left_brain_single": ["embedding", "slots", "entity", "memory_engine"],
+    "text_mode":         ["embedding", "slots", "entity", "emotion", "memory_engine"],
+    "multi_modal":       ["embedding", "slots", "entity", "emotion", "voiceprint", "asr", "memory_engine"],
 }
 
 
@@ -83,15 +88,43 @@ _NEED = {
 EXPECT_MUSIC_S = float(os.environ.get("VOICEMEM_EXPECT_MUSIC_S", "120"))
 
 
+#: 同一个能力的历史别名 → 正式能力名。
+#:
+#: ``schema`` 其实是"查询槽位分类器"，from_config 里一直叫 ``slots``，两个名字指
+#: 同一个东西；``embedder`` / ``vector_store`` / ``classifier`` 是构造参数那一路的
+#: 叫法。以前这两路各走各的、在 __init__ 里用 pick() 合并，等于同一件事有两个入口
+#: 两套代码。现在在门口就归一到能力名，后面只剩一条路。旧名字继续能用。
+_ALIASES = {"schema": "slots", "embedder": "embedding",
+            "vector_store": "memory_engine", "classifier": "slots"}
+
+
+def _canon(overrides: dict) -> dict:
+    """把别名归一成正式能力名。同时给了新旧两个名字时，正式名优先。"""
+    out = {}
+    for k, v in overrides.items():
+        out.setdefault(_ALIASES.get(k, k), v)
+    for k, v in overrides.items():
+        if k not in _ALIASES:
+            out[k] = v
+    return out
+
+
 class Utils:
     """能力表：内置默认(见 utils/defaults.py) + 用户覆盖，按需懒加载并缓存。"""
     def __init__(self, mode, base_url, memory_root, overrides):
-        self._factory = {**default_utils(base_url, memory_root), **overrides}
+        self._factory = {**default_utils(base_url, memory_root), **_canon(overrides)}
         self.need = _NEED[mode]
         self._cache = {}
     def get(self, name):
+        """能力值可以是**工厂**（函数 / lambda / 类，懒加载，内置默认都是这种），
+        也可以直接是**造好的对象**——两种都收，用户不必为了塞一个现成对象去包一层
+        lambda。判据是"是不是函数/类"，不是 callable()：组件对象自己可能带
+        ``__call__``，用 callable() 会把它当工厂调一次。"""
         if name not in self._cache:
-            self._cache[name] = self._factory[name]()
+            f = self._factory[name]
+            self._cache[name] = f() if (inspect.isfunction(f) or inspect.ismethod(f)
+                                        or inspect.isclass(f)
+                                        or isinstance(f, functools.partial)) else f
         return self._cache[name]
 
 
@@ -162,12 +195,12 @@ class Orchestrator:
         5 个能力开关。默认 ``None`` → 由 ``mode`` 推导（``multi_modal`` 全开、其余音频
         项关；情绪项在非 ``left_brain_single`` 下开）。显式传 True/False 覆盖 mode 推导。
     embedder / vector_store / classifier:
-        直接注入的组件依赖（左脑 embedding / memory engine / query 分类器）。默认 ``None``
-        → 组件用内置默认。与 ``util_overrides`` 里的 ``embedding`` / ``memory_engine`` /
-        ``schema`` 覆盖等价（后者会构造出对象注入到这三个参数）。
+        ``embedding`` / ``memory_engine`` / ``slots`` 三个能力的**旧参数名**，等价，
+        保留兼容。新代码统一用能力名。
     util_overrides:
-        按能力名覆盖内置默认（``embedding`` / ``schema`` / ``memory_engine`` 等）；
-        被覆盖的能力会注入对应组件构造参数。
+        按能力名覆盖内置默认：``embedding`` / ``slots`` / ``entity`` / ``emotion`` /
+        ``voiceprint`` / ``asr`` / ``vad`` / ``tts`` / ``memory_engine``（全表见
+        ``voicemem/utils/defaults.py``）。值可以是工厂，也可以直接是造好的对象。
     """
 
     def __init__(
@@ -193,11 +226,17 @@ class Orchestrator:
         if api_key:
             os.environ["OPENAI_API_KEY"] = api_key
         self.mode = mode
-        self.utils = Utils(mode, base_url, memory_root, util_overrides)
+        # embedder / vector_store / classifier 是同三个能力的旧参数名，收进来一起
+        # 归一（见 _ALIASES）：它们收对象、能力名那路收工厂，Utils.get 两种都认，
+        # 所以现在只有一条路，不再需要两套代码各走各的。
+        overrides = _canon({**util_overrides, "embedder": embedder,
+                            "vector_store": vector_store, "classifier": classifier})
+        overrides = {k: v for k, v in overrides.items() if v is not None}
+        self.utils = Utils(mode, base_url, memory_root, overrides)
 
         audio = mode == "multi_modal"
-        # 只有被用户覆盖的能力才注入组件（embedding/memory_engine/schema）；否则组件用自己的默认
-        pick = lambda n: self.utils.get(n) if n in util_overrides else None
+        # 只有被用户覆盖的能力才注入组件；否则组件用自己的默认。
+        pick = lambda n: self.utils.get(n) if n in overrides else None
 
         # 5 个音频能力开关：显式传值优先，否则由 mode 推导
         # （multi_modal 全开，其余音频项关；情绪项在非 left_brain_single 下开）。
@@ -206,10 +245,9 @@ class Orchestrator:
         if enable_abnormal_sound is None: enable_abnormal_sound = audio
         if enable_voiceprint is None:     enable_voiceprint = audio
         if enable_emotion is None:        enable_emotion = mode != "left_brain_single"
-        # 直接注入的组件依赖优先；否则回落到 util_overrides 里对应能力的覆盖对象。
-        if embedder is None:     embedder = pick("embedding")
-        if vector_store is None: vector_store = pick("memory_engine")
-        if classifier is None:   classifier = pick("schema")
+        embedder     = pick("embedding")
+        vector_store = pick("memory_engine")
+        classifier   = pick("slots")
 
         self._vector_store = vector_store   # 注入的 memory engine（默认 None → mem0）
         # 默认落在**当前工作目录**下，不是包的安装位置。
@@ -236,7 +274,7 @@ class Orchestrator:
         self._multi_modal.mkdir(parents=True, exist_ok=True)
         self._cognitive_db = self._db_path
         self._user_id = user_id
-        self._base_url = base_url or os.environ.get("OPENAI_BASE_URL") or None
+        self._base_url = resolve_base_url(base_url)
         # Official/default is OpenAI embeddings (OpenAILocalEmbedder, built
         # lazily in _get_repo() below); pass a different TextEmbedder-
         # conforming object here to use something else for the left-brain
@@ -510,31 +548,88 @@ class Orchestrator:
         """
         import json as _json
 
+        from voicemem.lang import is_zh as _is_zh, label_rule as _label_rule
+
+        def _looks_cjk(t: str) -> bool:
+            return any("\u4e00" <= ch <= "\u9fff" for ch in (t or ""))
+        def _keep(items):
+            """语言守卫：标签跟原话不同文种就丢掉。
+
+            prompt 里已经写了"跟随说话人的语言"、示例也按语言换过了，但模型在
+            temperature=0 下仍会时不时输出中文标签（实测两次里约一次）。存进去
+            的后果比丢掉严重得多：这份画像每轮都拼进 system prompt，英文对话里
+            会突然冒出中文；而丢掉只是这一轮少一条特质，下一轮还会再抽。
+            跟 attribution_manager 精炼后语言变了就保留原句是同一个取舍。
+            """
+            want_cjk = _is_zh()
+            out = []
+            for slot, label in items:
+                if _looks_cjk(label) != want_cjk:
+                    print(f"[RBTrait] 语言不符，丢弃：{slot} ← {label}", flush=True)
+                    continue
+                out.append((slot, label))
+            return out
+
         from voicemem.leftbrain import merged_extraction
         if merged_extraction.enabled():
             cached = merged_extraction.take_traits(text)
             if cached is not None:
                 valid = {"喜好与厌恶", "表达风格", "思维模式", "应对方式", "情绪"}
-                return [(s, l) for s, l in cached if s in valid and l]
+                return _keep([(s, l) for s, l in cached if s in valid and l])
 
-        prompt = (
-            f"用户说了这句话（当前情绪：{emotion or '未知'}）：\n「{text[:300]}」\n\n"
-            "判断这句话有没有透露出以下几类主观信息，每类最多提炼一条简短标签（中文，5-15字）：\n"
-            "- 喜好与厌恶：本能的喜欢/讨厌/偏好\n"
-            "- 表达风格：说话/沟通方式和习惯\n"
-            "- 思维模式：思考、判断、决策的习惯\n"
-            "- 应对方式：面对压力/负面情绪时怎么自我调节\n"
-            "- 情绪：什么情况下会有什么情绪。**必须写成一个规律，不是一个情绪词**：\n"
-            "  「评审前会紧张」「被打断就烦」「一个人待着会踏实」，不要写「焦虑」「开心」。\n"
-            "  这句话会成为脑图上一个节点的标题，光一个情绪词看不出是什么事。\n\n"
-            "没有清晰体现的类别就不要输出。\n"
-            "**标签的写法**：它会成为脑图上一个节点的标题，所以写成一句短短的规律，\n"
-            "5-15 字，不要主语、不要句号：「讨厌被打断」「压力大时想被安抚」「先要结论」。\n"
-            "不要写成「用户倾向于详细规划和结构化思考。」这种带主语的整句，也不要\n"
-            "把原话或事实抄一遍。\n"
-            '只输出 JSON：{"items": [{"slot": "喜好与厌恶", "label": "讨厌被打断"}, ...]}'
-            '（items 可以是空列表 []）'
-        )
+        # 中英两套 prompt，按这一轮说的话选。
+        #
+        # 曾经只有中文这一套：英文用户进来，事实是英文、特质却全是中文——而且
+        # 模型是**照抄示例**（存下来的正好是「评审前会紧张」「讨厌被打断」这几个
+        # 示例原文）。只加一句"跟随输入语言"的规则没用，示例的牵引力更强，
+        # 所以整套都要换。slot 名保持中文：它是内部键，检索/配额/脑图都按它做键。
+        if _is_zh():
+            prompt = (
+                f"用户说了这句话（当前情绪：{emotion or '未知'}）：\n「{text[:300]}」\n\n"
+                "判断这句话有没有透露出以下几类主观信息，每类最多提炼一条简短标签"
+                "（5-15 字）：\n"
+                "- 喜好与厌恶：本能的喜欢/讨厌/偏好\n"
+                "- 表达风格：说话/沟通方式和习惯\n"
+                "- 思维模式：思考、判断、决策的习惯\n"
+                "- 应对方式：面对压力/负面情绪时怎么自我调节\n"
+                "- 情绪：什么情况下会有什么情绪。**必须写成一个规律，不是一个情绪词**：\n"
+                "  「评审前会紧张」「被打断就烦」「一个人待着会踏实」，不要写「焦虑」「开心」。\n"
+                "  这句话会成为脑图上一个节点的标题，光一个情绪词看不出是什么事。\n\n"
+                "没有清晰体现的类别就不要输出。\n"
+                "**标签的写法**：写成一句短短的规律，5-15 字，不要主语、不要句号：\n"
+                "「讨厌被打断」「压力大时想被安抚」「先要结论」。\n"
+                "不要写成「用户倾向于详细规划和结构化思考。」这种带主语的整句，也不要\n"
+                "把原话或事实抄一遍。\n"
+                f"{_label_rule()}\n"
+                '只输出 JSON：{"items": [{"slot": "喜好与厌恶", "label": "讨厌被打断"}, ...]}'
+                '（items 可以是空列表 []）'
+            )
+        else:
+            prompt = (
+                f"The user said this (current emotion: {emotion or 'unknown'}):\n"
+                f"\"{text[:300]}\"\n\n"
+                "Does it reveal any of these subjective things about the speaker? "
+                "At most ONE short label per category (3-8 words):\n"
+                "- 喜好与厌恶: gut likes / dislikes / preferences\n"
+                "- 表达风格: habits of speaking and communicating\n"
+                "- 思维模式: how they think, weigh things, decide\n"
+                "- 应对方式: what they do to cope with stress or bad feelings\n"
+                "- 情绪: WHEN they feel WHAT. **A pattern, never a bare feeling "
+                "word**: \"tense before design reviews\", \"annoyed when "
+                "interrupted\", \"calm when alone\" — NOT \"anxious\" / \"happy\". "
+                "It becomes the title of a node on a graph; a bare word says nothing.\n\n"
+                "Skip any category the utterance does not clearly show.\n"
+                "**How to write a label**: a short pattern, no subject, no full stop:\n"
+                "  good: hates being interrupted / wants comfort under stress / "
+                "conclusion first\n"
+                "  bad: The user tends to plan in detail. (a full sentence with a subject)\n"
+                "  bad: I major in computer science (copying the utterance / a plain fact)\n"
+                "The slot names above are internal keys — keep them exactly as written, "
+                "in Chinese. Only the label follows the language rule below.\n"
+                f"{_label_rule()}\n"
+                'Output JSON only: {"items": [{"slot": "喜好与厌恶", '
+                '"label": "hates being interrupted"}, ...]} (items may be [])'
+            )
         raw = self._llm_json(prompt)
         if not raw:
             return []
@@ -549,28 +644,45 @@ class Orchestrator:
             label = str(it.get("label", "")).strip()
             if slot in valid_slots and label:
                 result.append((slot, label))
-        return result
+        return _keep(result)
 
     def _embed_text(self, text: str) -> list[float]:
+        """图层实体 / slot 锚点 / 右脑判断表用的 embedding。
+
+        **注入了 embedder 就用注入的那个**——这里以前写死 OpenAI，绕过了
+        ``VoiceMem(embedding=…)``，于是配了本地模型也只生效一半：记忆向量走本地，
+        图层实体和判断表仍然发远程。同一个库里因此并存两种维度（384 / 1536），
+        而下面那句"跟左脑共用一份缓存"也从来没兑现过——缓存按模型名分键，
+        两条通道用不同模型时一次都命中不了。
+
+        这条还在**查询热路径**上：右脑检索每轮都会调它
+        （traits_store.search_scored）。实测本地 E5 查询 embedding 10ms、
+        OpenAI 178ms，统一之后每轮省下这一跳，也少一个断网/限流的单点。
+
+        没注入时保持原样（默认就是 OpenAI），所以默认配置的行为和已有向量都不变。
+        """
+        if self._embedder is not None:
+            return self._embedder.embed_query_text(text) if hasattr(
+                self._embedder, "embed_query_text") else self._embedder.embed_texts([text])[0]
         # 跟左脑共用一份缓存：这里要的实体（'坚果'/'素食主义者'/'用户'）左脑刚
         # embed 过一轮，一模一样的字符串没必要再发一次。
         from voicemem.utils.common import embed_cache
-        model = os.environ.get("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+        model = resolve_model(role="embedding")
         return embed_cache.resolve(model, [text], self._embed_uncached)[0]
 
     def _embed_uncached(self, texts: list[str]) -> list[list[float]]:
         from openai import OpenAI
         client = OpenAI(
-            api_key=os.environ.get("OPENAI_API_KEY"),
+            api_key=resolve_api_key(),
             base_url=self._base_url,
             timeout=15.0,
         )
         _kw = {
-            "model": os.environ.get("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
+            "model": resolve_model(role="embedding"),
             "input": texts,
             "encoding_format": "float",   # 部分兼容后端不支持 base64
         }
-        if "openrouter" in str(self._base_url or os.environ.get("OPENAI_BASE_URL", "")).lower():
+        if "openrouter" in str(resolve_base_url(self._base_url) or "").lower():
             _kw["extra_body"] = {"provider": {"order": ["OpenAI"], "allow_fallbacks": False}}
         resp = client.embeddings.create(**_kw)
         _exp = int(os.environ.get("VOICEMEM_EMBED_DIM", "1536"))
@@ -585,12 +697,12 @@ class Orchestrator:
         try:
             from openai import OpenAI
             client = OpenAI(
-                api_key=os.environ.get("OPENAI_API_KEY"),
+                api_key=resolve_api_key(),
                 base_url=self._base_url,
                 timeout=15.0,
             )
             resp = client.chat.completions.create(
-                model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+                model=resolve_model(),
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
                 temperature=0,
@@ -608,12 +720,12 @@ class Orchestrator:
         try:
             from openai import OpenAI
             client = OpenAI(
-                api_key=os.environ.get("OPENAI_API_KEY"),
+                api_key=resolve_api_key(),
                 base_url=self._base_url,
                 timeout=15.0,
             )
             resp = client.chat.completions.create(
-                model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+                model=resolve_model(),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0,
                 max_tokens=max_tokens,
@@ -871,13 +983,19 @@ class Orchestrator:
         try:
             from openai import OpenAI
             client = OpenAI(
-                api_key=os.environ.get("OPENAI_API_KEY"),
+                api_key=resolve_api_key(),
                 base_url=self._base_url,
                 timeout=10.0,
             )
             user_name = self._get_user_name()
             entity_hint = f", involving: {', '.join(entities)}" if entities else ""
-            is_chinese = self._is_english(text) is False and any("一" <= c <= "鿿" for c in text)
+            # 跟**库语言**走，不跟用户这一句用什么语言走。
+            #
+            # 原来是按这句话有没有中文字符判的：英文库里用户偶尔冒一句中文，
+            # inner_os 就成了中文，跟同一条记忆的其它字段脱节。语言是库的属性，
+            # 见 voicemem/lang.py。
+            from voicemem.lang import is_zh as _os_is_zh
+            is_chinese = _os_is_zh()
             pronoun = user_name if user_name else ("用户" if is_chinese else "they")
             if is_chinese:
                 system_prompt = (
@@ -914,7 +1032,7 @@ class Orchestrator:
                 user_content = f"What the user said: {text}\nEmotion: {emotion}{entity_hint}"
 
             resp = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=resolve_model(),
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user",   "content": user_content},
@@ -982,6 +1100,7 @@ class Orchestrator:
         observed_at: str | None = None,
         async_facts: bool = False,
         agent_reply: str | None = None,
+        on_complete=None,
     ) -> dict:
         """将一条语音输入存入记忆库。
 
@@ -1005,6 +1124,9 @@ class Orchestrator:
             agent 对这句话的回复。不传就自动取 ``vm.reply()`` 登记过的那句，所以
             "先回复、再存"的标准流程不用改；回复不走 ``vm.reply()`` 的显式给一句。
             左脑拿它给用户那句消歧，右脑拿**上一轮**的回复做情绪归因。
+        on_complete:
+            可选回调，事实和右脑写入完成后接收最终结果字典。使用
+            ``async_facts=True`` 时回调在后台线程执行。
 
         Returns
         -------
@@ -1059,6 +1181,14 @@ class Orchestrator:
                 daemon=True,
             ).start()
 
+        def _notify_complete(result: dict) -> None:
+            if on_complete is None:
+                return
+            try:
+                on_complete(result)
+            except Exception as e:
+                print(f"[ingest] on_complete 回调失败：{type(e).__name__}: {e}", flush=True)
+
         # async_facts=True：事实抽取 + 图谱写入（耗时的部分）扔进后台线程，
         # Ingest() 立刻带着已同步算完的 audiomem 字段返回。默认 False。
         if async_facts:
@@ -1070,11 +1200,12 @@ class Orchestrator:
                 实测六轮连说丢掉两轮就是这么丢的，查了很久才定位到。
                 """
                 try:
-                    self._finish_ingest(ctx)
+                    _notify_complete(self._finish_ingest(ctx))
                 except Exception as e:
                     import traceback
                     print(f"[ingest] 这一轮没能入库（{type(e).__name__}: {e}）\n"
                           f"{traceback.format_exc()}", flush=True)
+                    _notify_complete({"error": str(e), "persistent_memory_created": False})
 
             threading.Thread(target=_bg, daemon=True).start()
             return {
@@ -1102,7 +1233,9 @@ class Orchestrator:
                 "new_routine":         None,
             }
 
-        return self._finish_ingest(ctx)
+        result = self._finish_ingest(ctx)
+        _notify_complete(result)
+        return result
 
     def _tag_memories(self, memory_ids, tags) -> None:
         """给一批记忆写 memory_tags；tags=[(name, conf),...]。cog store 不支持就跳过。"""
@@ -1328,6 +1461,7 @@ class Orchestrator:
         return {
             "facts_count":         result.facts_count,
             "memory_ids":          result.memory_ids,
+            "persistent_memory_created": bool(result.memory_ids or heartnote_id),
             "affect":              result.affect,
             "triggered_reminders": triggered_reminders,
             "proactive_memories":  proactive_memories,

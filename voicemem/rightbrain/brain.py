@@ -29,6 +29,7 @@ import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
+from voicemem.llm_config import resolve_api_key, resolve_model
 
 
 # ── 结果容器 ───────────────────────────────────────────────────────────────────
@@ -241,7 +242,24 @@ def _is_self_entity(ent, user_id: str, owner_names) -> bool:
 #: 相似度全挤在 0.36–0.45，第一名和第八名只差 0.08，那就是没命中，返回它们只是
 #: 拿噪音把 top-N 的位置占满（右脑限席那段注释里说的就是这个）。
 #: 宁可这一轮右脑不给画像，也不要给三条不相关的。
-RB_TRAIT_MIN_SIM = float(os.environ.get("VOICEMEM_RB_TRAIT_MIN_SIM", "0.45"))
+#: 换 embedder 之后这个数必须重量——不同模型的相似度分布完全不同，写死一个常量
+#: 只对其中一个有效。实测（同一批 130 条判断）：
+#:   OpenAI text-embedding-3-small   噪音上界约 0.24  → 0.45 偏严但可用
+#:   本地 multilingual-e5-small      真命中 0.89~0.92   噪音 0.82~0.86  → 0.88
+#: E5 把短句相似度整体抬高并压窄，拿 0.45 去卡它等于没有门槛（噪音也有 0.86）。
+#: 按向量维度选一档：384 = 本地 E5，其余按 OpenAI。维度不是模型身份的严格标识，
+#: 但在当前两个内置实现之间够用；要精确就用 VOICEMEM_RB_TRAIT_MIN_SIM 显式指定。
+_TRAIT_MIN_SIM_BY_DIM = {384: 0.88}
+_TRAIT_MIN_SIM_DEFAULT = 0.45
+RB_TRAIT_MIN_SIM = float(os.environ.get("VOICEMEM_RB_TRAIT_MIN_SIM",
+                                        _TRAIT_MIN_SIM_DEFAULT))
+
+
+def trait_min_sim(dim: int | None) -> float:
+    """这个 embedder 该用多高的门槛。显式设了环境变量就一切照它。"""
+    if os.environ.get("VOICEMEM_RB_TRAIT_MIN_SIM"):
+        return RB_TRAIT_MIN_SIM
+    return _TRAIT_MIN_SIM_BY_DIM.get(dim or 0, _TRAIT_MIN_SIM_DEFAULT)
 
 
 def _rb_trait_hits(store, user_id: str, query: str, top_k: int = 4) -> list["RightBrainHit"]:
@@ -257,7 +275,7 @@ def _rb_trait_hits(store, user_id: str, query: str, top_k: int = 4) -> list["Rig
     """
     out: list[RightBrainHit] = []
     for t, sim in store.search_scored(user_id, query, top_k=top_k):
-        if sim < RB_TRAIT_MIN_SIM:
+        if sim < trait_min_sim(getattr(store, "last_query_dim", None)):
             break                      # 已按相似度降序，后面只会更低
         # 证据里挑最近一条当支撑——光一句 claim，模型看不出它是从哪来的。
         ev = t.evidence[0].quote if t.evidence else ""
@@ -286,8 +304,15 @@ def _rb_trait_hits(store, user_id: str, query: str, top_k: int = 4) -> list["Rig
 #: 已经跟查询相关了，所以席位放宽到 3；response_experience 仍是查询无关的内部
 #: 笔记，维持 1 席。
 _SOURCE_QUOTA = {
-    "response_experience": max(0, int(os.environ.get("VOICEMEM_RB_RESPONSE_MAX", "1"))),
+    # 0 = 不进 prompt。这一类已停写停检（见 learn_from_reaction 的说明），
+    # 名额留着只为老库里那些还能被显示层认出来；想看老数据设成 1。
+    "response_experience": max(0, int(os.environ.get("VOICEMEM_RB_RESPONSE_MAX", "0"))),
     "profile": max(0, int(os.environ.get("VOICEMEM_RB_PROFILE_MAX", "3"))),
+    # heartnote 也要限席。它的 priority 跟**锚点新鲜度**走，刚存下的最强——于是
+    # 连着问三句，第三句的右脑栏里全是自己前两句问过的原话
+    # （"Emotional note: 你能说说对我的印象吗"），一条对这个人的判断都挤不进来。
+    # 刚说过的话天然打得过沉淀下来的画像，所以必须限。
+    "situation_pattern": max(0, int(os.environ.get("VOICEMEM_RB_HEARTNOTE_MAX", "2"))),
 }
 
 
@@ -655,16 +680,13 @@ class RightBrain:
     #: 归因每段的字数上限——这几段每轮都要拼进 system prompt，松了就是固定开销。
     _EXPERIENCE_MAX_CHARS = 60
 
-    _ATTRIBUTION_PROMPT = """你在给助手的回应打分：用户这轮是不是在对助手那句作出反应？只输出 JSON。
+    _ATTRIBUTION_PROMPTS = {"zh": """你在给助手的回应打分：用户这轮是不是在对助手那句作出反应？只输出 JSON。
 
 助手那句：{reply}
 用户这轮：{user}{emotion_line}
 
 {{"significant": bool,
   "assistant_helped": "助手那句帮到用户了(true)还是帮了倒忙(false)",
-  "assistant_did": "主语必须是助手：助手那句用了什么做法，可迁移不抄原话，"
-                   "如「直接给了分点方案」「先接住情绪再问细节」",
-  "next_time": "助手以后遇到类似情形怎么做（可执行的动作）",
   "user_reaction": "主语必须是用户：用户的反应",
   "why": "为什么这么反应（落到助手那句的哪一点）",
   "user_trait": {{"slot": "表达风格|应对方式|思维模式|喜好与厌恶", "label": "这个反应
@@ -677,7 +699,27 @@ significant 默认 false，只有这几种才 true：
 以下一律 false：继续讲自己的事、回答助手的问题、提新要求、寒暄。
 用户情绪不好 ≠ 助手说错话。
 significant 不管真假，其余字段都要照填（调用方另有判定）。
-文本字段各 ≤{n} 字，语言跟用户那句一致。"""
+文本字段各 ≤{n} 字，使用中文。""",
+        "en": """Decide whether the user is reacting to the assistant's reply. Output JSON only.
+
+The assistant's reply: {reply}
+The user's response: {user}{emotion_line}
+
+{{"significant": bool,
+  "assistant_helped": "whether the reply helped (true) or made things worse (false)",
+  "user_reaction": "the user's reaction, with the user as the subject",
+  "why": "what specifically in the assistant's reply caused that reaction",
+  "user_trait": {{"slot": "表达风格|应对方式|思维模式|喜好与厌恶", "label": "a lasting
+    user trait revealed by the reaction, such as 'shuts down when given solutions' or
+    'speaks plainly when dissatisfied'; use null for a one-off situational reaction"}}}}
+
+significant is false by default. Set it to true only for explicit dissatisfaction,
+correction, explicit thanks or approval, an obvious emotional change caused by the
+assistant's reply, or a dismissive ending such as "whatever" or "never mind".
+Continuing the story, answering a question, making a new request, and small talk are
+all false. The user feeling bad does not mean the assistant did something wrong.
+Fill every field even when significant is false; callers make additional decisions.
+Keep each text field at most {n} characters and write it in English."""}
 
     def _attribute_reaction(self, user_text: str, agent_reply: str, emotion: str) -> dict:
         """(助手上一句 + 用户这轮) → 归因：记不记 + 反应/为什么/下次怎么做。
@@ -691,8 +733,13 @@ significant 不管真假，其余字段都要照填（调用方另有判定）�
         forced_failed = bool(sigs.dissatisfaction_signal or sigs.correction_signal)
         forced = forced_failed or _hits_any(user_text, _APPRECIATION_CUES)
 
-        emotion_line = f"\n（情绪识别：{emotion}）" if emotion else ""
-        raw = self._llm_json(self._ATTRIBUTION_PROMPT.format(
+        from voicemem.lang import memory_language
+        language = memory_language()
+        emotion_line = (
+            (f"\n（情绪识别：{emotion}）" if language == "zh" else
+             f"\nDetected emotion: {emotion}") if emotion else ""
+        )
+        raw = self._llm_json(self._ATTRIBUTION_PROMPTS[language].format(
             reply=agent_reply[:300], user=user_text[:300],
             emotion_line=emotion_line, n=self._EXPERIENCE_MAX_CHARS,
         ))
@@ -722,13 +769,19 @@ significant 不管真假，其余字段都要照填（调用方另有判定）�
     def learn_from_reaction(self, text: str, emotion: str, entities, agent_reply: str,
                             memory_id: str | None = None, observed_at=None,
                             heartnote_id: str | None = None) -> None:
-        """(助手上一句 + 用户这轮) → 情绪归因，有必要才落一条 response_experience。
+        """(助手上一句 + 用户这轮) → 情绪归因，有必要才往判断层挂一条特征。
 
-        产物分两处存，因为它们是两类东西：
-          · 助手侧「做法 + 下次怎么做」→ response_experience（content 存可迁移的
-            做法，存原话换个话题就用不上；next_time 进 metadata）
-          · 用户侧「透露出的长期特征」→ 图层 slot（表达风格/应对方式…），由归因
-            归纳成人格描述，跨话题都能用
+        只有**一个出口**：用户侧「透露出的长期特征」→ 判断层的 5 个 slot
+        （应对方式/表达风格/思维模式/喜好与厌恶），跨话题都能用。抽不出长期
+        特征（只是这一次的情境反应）就不挂，不硬凑。
+
+        原来还有第二个出口：助手侧的「做法 + 下次怎么做」写成 response_experience。
+        那条线**只有写没有读**——`next_time`（真正有用的那半）存进了 metadata，
+        全仓库没有任何读取方；进 prompt 的是 `assistant_did`，实际长成
+        "The assistant uses a relaxed tone to guide the user"，每轮占一个
+        _SOURCE_QUOTA 名额却给不出信息。
+        而助手该怎么做本来就能从用户侧特征推出来——「他低落时想要理解和认同」
+        已经等于告诉助手该给什么了，不必单独存一份。所以这条线整条去掉。
 
         不受 write() 那个 ``if not emotion`` 管——"不是这个意思"是行为信号，跟声学
         情绪有没有输出无关（text_mode 下 emotion 常为空）。没有助手上一句直接返回，
@@ -742,64 +795,27 @@ significant 不管真假，其余字段都要照填（调用方另有判定）�
             if not attribution.get("significant"):
                 return
 
-            from voicemem.rightbrain.types import MemoryAnchor
-            from voicemem.rightbrain.anchor_router import normalize_emotion_strict
-
             def _clip(v) -> str:
                 s = str(v or "").strip()
                 return s if len(s) <= self._EXPERIENCE_MAX_CHARS else s[:self._EXPERIENCE_MAX_CHARS] + "…"
 
-            what_i_did = _clip(attribution.get("assistant_did")) or _clip(reply)
-            reaction   = _clip(attribution.get("user_reaction"))
-            why        = _clip(attribution.get("why"))
-            next_time  = _clip(attribution.get("next_time"))
-            failed     = not bool(attribution.get("assistant_helped", False))
+            failed = not bool(attribution.get("assistant_helped", False))
+            print(f"[RBReaction] {'失败' if failed else '有效'}："
+                  f"{_clip(attribution.get('user_reaction'))}", flush=True)
 
-            en = _is_en_text(text)
-            condition = (f"{reaction}{' — ' + why if why else ''}" if en
-                         else f"{reaction}{'；' + why if why else ''}")
-
-            # global_style：每个查询计划都带这个兜底锚点，所以这条教训每轮都捞得到
-            # ——"别再这么回应"不该等同一话题重现才想起来。情绪/实体再叠话题相关性。
-            anchors = [
-                MemoryAnchor(anchor_type="global_style", anchor_id="global_style",
-                             role="global_profile", weight=1.0, confidence=1.0),
-            ]
-            canonical = normalize_emotion_strict(emotion) if emotion else None
-            if canonical is not None:
-                anchors.append(MemoryAnchor(anchor_type="emotion", anchor_id=canonical,
-                                            role="trigger", weight=1.0, confidence=1.0))
-            for name in (entities or []):
-                key = str(name).lower().strip()
-                if key:
-                    anchors.append(MemoryAnchor(anchor_type="entity", anchor_id=key,
-                                                role="subject", weight=0.8, confidence=1.0))
-
-            _obs = (str(observed_at)
-                    if observed_at and re.match(r"^\d{4}-\d{2}-\d{2}", str(observed_at))
-                    else None)
-            exp = self._rb_repo().write_response_experience(
-                self._user_id, what_i_did, anchors,
-                condition=condition,
-                failed=failed,
-                # 反应/原话留底当证据，不进 prompt——用户侧的结论在图层那边
-                metadata={"next_time_policy": next_time, "why": why, "reaction": reaction,
-                          "agent_reply": reply[:300], "user_reaction": text.strip()[:200],
-                          "emotion": emotion or ""},
-                evidence_memory_ids=[memory_id] if memory_id else [],
-                created_at=_obs,
-            )
-            print(f"[RBExperience] {'失败' if failed else '有效'}：{what_i_did}"
-                  f" | 下次：{next_time}", flush=True)
-
-            # 用户侧的观察不留在这条经验里：「这人被直接给方案会关闭」是长期特征，
-            # 该沉淀进图层 slot 由归因归纳成人格，否则只有这条经验被检中才看得见。
+            # 「这人被直接给方案会关闭」是长期特征，沉淀进判断层的 slot，
+            # 由归因归纳成人格描述，跨话题都能用。
             trait = attribution.get("user_trait") or {}
             if isinstance(trait, dict):
                 slot_name, label = str(trait.get("slot") or ""), _clip(trait.get("label"))
                 # 证据用**用户原话**，不是助手这条经验——归因是读证据来写描述的，
                 # 挂 exp 就成了「拿助手的做法去描述用户特征」。
                 if label and label.lower() not in ("null", "none"):
+                    from voicemem.lang import is_zh
+                    label_is_zh = any("一" <= ch <= "鿿" for ch in label)
+                    if label_is_zh != is_zh():
+                        print(f"[RBTrait] 语言不符，丢弃：{slot_name} ← {label}", flush=True)
+                        return
                     from voicemem.rightbrain.traits_store import Evidence
                     if self._traits().add(
                             self._user_id, slot_name, label,
@@ -807,7 +823,7 @@ significant 不管真假，其余字段都要照填（调用方另有判定）�
                                      cause_id=memory_id or "", at=str(observed_at or ""))):
                         print(f"[RBTrait] {slot_name} ← {label}", flush=True)
         except Exception as e:
-            print(f"[RBExperience] 回应经验写入失败: {e}")
+            print(f"[RBReaction] 反应归因失败: {e}")
 
     # ── 右脑清洁 ────────────────────────────────────────────────────────────────
 
@@ -858,12 +874,12 @@ significant 不管真假，其余字段都要照填（调用方另有判定）�
 
             from openai import OpenAI
             client = OpenAI(
-                api_key=os.environ.get("OPENAI_API_KEY"),
+                api_key=resolve_api_key(),
                 base_url=self._base_url,
                 timeout=60.0,
             )
             resp = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=resolve_model(),
                 messages=[
                     {"role": "system", "content": (
                         "你是记忆清洁助手。分析以下情感记忆列表，做两类判断。\n"

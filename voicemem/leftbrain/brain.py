@@ -38,6 +38,72 @@ from voicemem.rightbrain.brain import _is_en_text
 # 靠词面/时间加分"救回"的记忆最多补几条（在 top_k 之外额外给，不占语义名额）
 _RESCUE_K = 3
 
+
+# ── 时间权重 ──────────────────────────────────────────────────────────────────
+# 在这之前，检索排序**只看语义相似度**：三个月前的旧事和昨天说的话完全平权。
+# （库里那套 heat 衰减写好了、每次命中也在累加，但它唯一的下游是一个全仓库
+#  没人调用的归档函数，对排序零影响。）
+#
+# 两个刻意的限制，都是为了别把好东西弄坏：
+#   · 只在**已经检索到的候选**里重排——不改召回，所以不会拿一条不相关的新记忆
+#     去换一条不相关的旧记忆，只在相似度接近时向近期倾斜。
+#   · 衰减有下限——"对坚果过敏""不吃辣"这类长期属性几个月才提一次，但每次都关键，
+#     不该因为久远就被上周的琐事挤掉。所以最多打到 RECENCY_FLOOR，不会趋近 0。
+#
+# 用 observed_at（事情**发生**在哪天）而不是入库时间：补记一件上个月的事，
+# 该按上个月算，不是按今天。
+#: 半衰期（天）。设 0 或负数即关掉时间权重。
+RECENCY_HALFLIFE_DAYS = float(os.environ.get("VOICEMEM_RECENCY_HALFLIFE_DAYS", "30"))
+#: 衰减的下限，决定时间最多能有多大话语权。
+#: 权重范围是 [FLOOR, 1]，所以**能被翻转的相似度差距最大是 1/FLOOR**：
+#:   0.60 → 1.67x（相似度高出 67% 的也会被挤掉，太激进）
+#:   0.75 → 1.33x（默认：打破近似平局，翻不动明显更相关的）
+#:   0.90 → 1.11x（几乎只在同分时起作用）
+#: 对记忆系统来说召回错东西比召回旧东西更糟，所以取保守的一档。
+RECENCY_FLOOR = float(os.environ.get("VOICEMEM_RECENCY_FLOOR", "0.75"))
+
+
+#: 只有问"最近怎么样"这类问题时才按时间加权。
+#:
+#: 一开始是**所有查询**都乘时间权重，实测出事：「我在哪读书」的正确答案
+#: （"Jiaqi is an undergraduate in computer science at NUS"，半年前记下的）
+#: 相似度 0.810 全场最高，乘上 0.752 之后掉到 0.609，被一条 0.773 的
+#: 「用户希望用中文交流」挤到第六。
+#: 原因是**长期属性的答案天然是旧的**：专业、过敏、老家、性格——它们没有更新的
+#: 版本，罚旧等于罚对。而"最近在忙什么"这类问题才真的该偏向新的。
+#: 所以按问句区分：问时效才加权，问属性不加权。
+#:
+#: 事实相互矛盾时（"在 TikTok 实习" / "在 NVIDIA 实习"）不靠这里解决——
+#: 两条都带日期进 prompt，由回复模型按时间取舍，那条路更准也没有副作用。
+_RECENCY_CUES = (
+    "最近", "近来", "这阵子", "这几天", "今天", "昨天", "刚才", "刚刚",
+    "现在", "目前", "当前", "这两天", "最新", "上周", "本周", "这周",
+    "recent", "lately", "today", "yesterday", "just now", "right now",
+    "currently", "these days", "this week", "last week", "latest",
+)
+
+
+def wants_recency(query: str) -> bool:
+    """这个问题问的是「近况」还是「属性」。"""
+    q = (query or "").lower()
+    return any(c in q for c in _RECENCY_CUES)
+
+
+def _recency_weight(observed_at: str) -> float:
+    """事情发生得越近，权重越高；没有日期就不打折（当作与时间无关的属性）。"""
+    if RECENCY_HALFLIFE_DAYS <= 0 or not observed_at:
+        return 1.0
+    from datetime import date, datetime
+    try:
+        d = datetime.fromisoformat(str(observed_at)[:10]).date()
+    except (TypeError, ValueError):
+        return 1.0                       # 日期解析不了就别猜，按不打折处理
+    age = (date.today() - d).days
+    if age <= 0:                         # 今天或（数据有误）未来
+        return 1.0
+    return RECENCY_FLOOR + (1.0 - RECENCY_FLOOR) * (0.5 ** (age / RECENCY_HALFLIFE_DAYS))
+
+
 # 候选池构造模式（VOICEMEM_POOL_MODE）：
 #   union  —— slot 池 ∪ 宏观关联 slot 池 ∪ 实体池 ∪ 一跳邻居池。
 #   strict —— schema routing → entity narrowing → graph expansion：实体命中时取
@@ -194,6 +260,7 @@ class LeftBrain:
                     db_path=_space.db(self._memory_root),
                     cognitive_db_path=self._cognitive_db,
                     enable_cognitive_graph=True,
+                    base_url=self._base_url,
                 )
                 self._cache["repo"] = LeftBrainMemoryRepositoryV2(
                     embedder, config=cfg, cognitive_annotator=annotator,
@@ -479,7 +546,15 @@ class LeftBrain:
         # （"今天感到很累，可能与明天下午的会议有关" / "最近感到很累，可能与明天
         # 下午的会议有关"），它们分数也几乎一样，于是 top-5 里有两三条说的是同一
         # 件事——用户的感受是"它就记得这么点东西"。
-        final_hits = _dedupe_near(hits)[:top_k]
+        # 去重之后截断。问「近况」的才按时间加权重排（见 wants_recency 上面那段），
+        # 问「属性」的保持纯相似度——长期属性的正确答案天然是旧的，罚旧等于罚对。
+        # 重排只在候选池内部发生，召回不变。
+        deduped = _dedupe_near(hits)
+        if wants_recency(query):
+            deduped = sorted(deduped,
+                             key=lambda h: h.score * _recency_weight(h.observed_at),
+                             reverse=True)
+        final_hits = deduped[:top_k]
         # 记忆生命周期：检索命中增加热度，读取时按 last_hit_at 指数衰减、低热度归档。
         cog_store = repo._cognitive_store
         if cog_store is not None and hasattr(cog_store, "record_memory_hits"):

@@ -29,6 +29,7 @@ import asyncio
 import inspect
 import os
 from typing import AsyncIterator, Callable
+from voicemem.llm_config import resolve_api_key, resolve_base_url, resolve_model
 
 # memory_context è solo "cosa ricordi dell'utente", non contiene richieste di personalità/stile di per sé, quindi il provider integrato
 # lo attacca dopo questa frase, invece di usarlo intero come system prompt.
@@ -47,8 +48,13 @@ def openai_reply(model: str | None = None, api_key: str | None = None,
                  base_url: str | None = None, system: str | None = None) -> Callable:
     """Provider di risposta integrato: API compatibile con OpenAI, output streaming. Restituisce una funzione async generator.
 
-    Il modello default usa ``OPENAI_CHAT_MODEL``, con fallback a ``gpt-4o-mini``. Il client viene creato solo alla prima chiamata,
-    ``import voicemem`` non richiede quindi una key."
+
+
+    模型走 ``reply`` 角色：``model`` 参数 → ``VOICEMEM_REPLY_MODEL`` → 跟随 ``chat``。
+    回复是用户直接听得见的一路，所以单独留了一个角色让它能和后台整理记忆的模型
+    分开配；不配就跟着 chat 走，不会出现"设了模型但回复还在用默认值"这种一半生效。
+    ``import voicemem`` 不会因此要求有 key（client 首次调用时才建）。
+
     """
     client = None
 
@@ -57,11 +63,11 @@ def openai_reply(model: str | None = None, api_key: str | None = None,
         if client is None:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(
-                api_key=api_key or os.environ.get("OPENAI_API_KEY"),
-                base_url=base_url or os.environ.get("OPENAI_BASE_URL") or None,
+                api_key=resolve_api_key(api_key),
+                base_url=resolve_base_url(base_url),
             )
         stream = await client.chat.completions.create(
-            model=model or os.environ.get("OPENAI_CHAT_MODEL") or "gpt-4o-mini",
+            model=resolve_model(model, "reply"),
             stream=True,
             messages=[{"role": "system", "content": compose_system(memory_context, system)},
                       {"role": "user", "content": text}],

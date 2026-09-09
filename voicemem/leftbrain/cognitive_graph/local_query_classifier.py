@@ -1,5 +1,6 @@
 """Classificatore query locale: query → slots(+entities), senza toccare LLM/rete."""
 
+
 # Allineato all'interfaccia di ``QuerySlotClassifier`` integrato (1 chiamata LLM), può essere sostituito tramite ``VoiceMem(schema=...)``
 # iniettandolo, spostando il passo ``Classify`` (estrai slot + entity) dall'API OpenAI al modello locale —
 # completamente simmetrico all'iniezione di ``embedding``:
@@ -8,6 +9,7 @@
     from voicemem.leftbrain.cognitive_graph.local_query_classifier import LocalQueryClassifier
     vm = VoiceMem(schema=lambda: LocalQueryClassifier())   # slots 走本地 E5，0 LLM
     vm.search("Dove lavoro?")                                  # Classify non chiama più LLM
+
 
 # Scelte progettuali (spiegate onestamente, nascosto nulla):
 # - **slots**: cosine E5 vs top-k delle descrizioni dei 7 slot base (~93% coerente con LLM nei test).
@@ -32,7 +34,7 @@ from voicemem.leftbrain.cognitive_graph.query_slot_classifier import QueryClassi
 # Condivide la stessa istanza E5 dei vettori memoria (models/embedding/), risparmia un set di pesi
 def _model_name() -> str:
     from voicemem.utils.common.paths import hf_model
-    return hf_model("embedding", "intfloat/multilingual-e5-small", "VOICEMEM_E5_MODEL")
+    return hf_model("embedding", "intfloat/multilingual-e5-small", "e5")
 
 
 _MODEL_NAME = _model_name()

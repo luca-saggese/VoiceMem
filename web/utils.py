@@ -18,10 +18,13 @@ from pydantic import BaseModel
 # voicemem/leftbrain/local_e5_embedder.py；这里 re-export 保持 `utils.LocalE5Embedder`
 # / `utils.shared_e5()` 的既有调用点不变（run.py 用它注入 VoiceMem(embedding=...)）。
 from voicemem.leftbrain.local_e5_embedder import LocalE5Embedder, shared_e5  # noqa: F401
+from voicemem.llm_config import resolve_model
 
 HERE = Path(__file__).resolve().parent
-CHAT_MODEL = os.environ.get("OPENAI_CHAT_MODEL", "gpt-4o")
-RT_MODEL = os.environ.get("OPENAI_REALTIME_MODEL", "gpt-realtime")
+#: demo 的回复模型。默认比后台整理用的强一档——这一路用户直接听得见。
+#: VOICEMEM_REPLY_MODEL（或旧名 OPENAI_CHAT_MODEL）/ models={"reply": ...} 都能覆盖。
+CHAT_MODEL = resolve_model(role="reply", default="gpt-4o")
+RT_MODEL = resolve_model(role="realtime")
 #: realtime 的音色。一直没设过，默认那个（alloy）念起来最平。
 #: gpt-realtime 上可选：alloy / ash / ballad / coral / echo / sage / shimmer /
 #: verse / marin / cedar —— marin 和 cedar 是新加的，起伏和呼吸感明显强。
@@ -60,7 +63,7 @@ def realtime_connect(reply=None):
     """方案 A：整段麦克风音频平行喂给它出原生语音。事件名随 SDK 版本可能微调
     （对照 openai_voice_demo/backend/providers/realtime.py）。"""
     _, cfg = _reply_seg(reply, "realtime")
-    return client.realtime.connect(model=cfg.get("model") or RT_MODEL)
+    return client.realtime.connect(model=resolve_model(cfg.get("model"), "realtime"))
 
 
 # ── SearchResult → 脑图 html 认识的 memory_hits 负载 ──────────────────────────
@@ -134,6 +137,9 @@ def hits_payload(result, has_audio=None, cluster_of=None):
                               # 节点从来不亮、左右脑之间也就没有射线。把 slot 名带上，
                               # 前端好把它落到该 slot 下的节点。
                               "slot": ((getattr(h, "metadata", None) or {}).get("slot_name") or ""),
+                              # 判断原文。页面显示的是它的第一人称改写版（run.py 的
+                              # rb_human），这里留一份原文给改写和脑图匹配用。
+                              "claim": ((getattr(h, "metadata", None) or {}).get("claim") or ""),
                               "source": h.source, "priority": h.priority,
                               "cluster": cluster_of(h.content, h.source) if cluster_of else ""}
                              for h in (getattr(result, "rb_hits", None) or [])],
@@ -216,9 +222,10 @@ def build_app(mode, session, classify, snapshot=None, audio_of=None, spaces=None
 
         @app.post("/api/spaces")                     # 新建一个空的
         async def api_space_new(req: Request) -> dict:
-            name = (await req.json()).get("name", "")
+            body = await req.json()
+            name, lang = body.get("name", ""), body.get("language", "")
             try:
-                return _create_space(name)
+                return _create_space(name, lang)
             except FileExistsError as e:
                 raise HTTPException(409, str(e))
             except ValueError as e:
@@ -243,6 +250,11 @@ def build_app(mode, session, classify, snapshot=None, audio_of=None, spaces=None
 
     # no-store：demo_local 也占 8787，同源缓存会让浏览器端出上一个 demo 的旧页面
     _NOCACHE = {"Cache-Control": "no-store"}
+
+    @app.get("/pcm-player-worklet.js")
+    def pcm_player_worklet():
+        return FileResponse(HERE / "pcm-player-worklet.js", headers=_NOCACHE,
+                            media_type="application/javascript")
 
     @app.get("/")
     def index():
