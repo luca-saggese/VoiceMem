@@ -1,10 +1,10 @@
-"""voicemem 各能力的内置默认实现工厂（util 名 -> 无参工厂）。
+"""Factory di implementazioni default integrate per le varie capacità di voicemem (nome util -> factory senza parametri).
 
-core.py 的 Utils 用它建默认；传函数给 VoiceMem(embedding=..., slots=...) 即覆盖对应项。
-九个位子：embedding / schema / entity / emotion / voiceprint / asr / vad /
-memory_engine / tts。前八个在核心链路上（按 mode 由 _NEED 决定加载哪些），
-tts 不在——记忆系统只到文本为止，出声是可选的一层。
-放这里而不是 core.py，是让顶层门面只讲「系统骨架」，不被这些具体默认实现的 import 撑大。
+Le Utils di core.py le usano per creare i default; passare funzioni a VoiceMem(embedding=..., slots=...) sovrascrive le voci corrispondenti.
+Nove posizioni: embedding / schema / entity / emotion / voiceprint / asr / vad /
+memory_engine / tts. Le prime otto sono sul percorso core (quale caricare dipende da _NEED secondo mode),
+tts non è incluso — il sistema memoria arriva solo al testo, l'audio è un layer opzionale.
+Messe qui invece che in core.py, così il facade di livello superiore parla solo di "scheletro del sistema", senza essere gonfiato dagli import delle implementazioni default specifiche.
 """
 from __future__ import annotations
 
@@ -16,19 +16,19 @@ def default_utils(base_url, memory_root):
         from voicemem.leftbrain.local_memory_store import OpenAILocalEmbedder, OpenAILocalEmbedderConfig
         return OpenAILocalEmbedder(OpenAILocalEmbedderConfig(base_url=base_url))
     def slots():
-        # 默认本地 E5 分类器：0 LLM、0 网络——投机预取那 0–300ms 预算里不能走网络，
-        # 而 Classify 就在那条路上（voicemem/stream.py 的 _speculate）。
-        # sentence-transformers 不在基础依赖里（随 [demo] extra 装），缺了就回落到
-        # LLM 版并打一行说明——静默回落等于悄悄开始花钱。
-        # VOICEMEM_SLOTS=openai 可强制用 LLM 版（要实体抽取 / 子 slot 下钻时）。
+        # Classificatore E5 locale default: 0 LLM, 0 rete — nel budget di prefetch speculativo 0-300ms non si può usare la rete,
+        # e Classify è proprio su quel percorso (_speculate in voicemem/stream.py).
+        # sentence-transformers non è nelle dipendenze base (viene installato con l'extra [demo]), se manca fa fallback alla
+        # versione LLM con una riga di spiegazione — un fallback silenzioso significa iniziare a spendere di nascosto.
+        # VOICEMEM_SLOTS=openai forza l'uso della versione LLM (quando serve estrazione entity / discesa sottoclassi).
         if os.environ.get("VOICEMEM_SLOTS", "local").lower() != "openai":
             try:
                 from voicemem.leftbrain.cognitive_graph.local_query_classifier import LocalQueryClassifier
                 from voicemem.leftbrain.local_e5_embedder import shared_e5
-                return LocalQueryClassifier(model=shared_e5())   # 和本地 embedder 共享一份 E5
+                return LocalQueryClassifier(model=shared_e5())   # Condivide la stessa istanza E5 con l'embedder locale
             except ImportError as e:
-                print(f"[slots] 本地分类器不可用（{e}）→ 回落 LLM 版 QuerySlotClassifier。"
-                      "装 sentence-transformers（或 pip install -e '.[demo]'）可用本地版。",
+                print(f"[slots] classificatore locale non disponibile ({e}) → fallback a QuerySlotClassifier versione LLM."
+                      "Installa sentence-transformers (o pip install -e '.[demo]') per usare la versione locale.",
                       flush=True)
         from voicemem.leftbrain.cognitive_graph.query_slot_classifier import QuerySlotClassifier
         return QuerySlotClassifier()
@@ -42,15 +42,14 @@ def default_utils(base_url, memory_root):
         from voicemem.utils.audio.voiceprint.speaker_encoder import SpeakerEncoder
         return SpeakerEncoder(device="cpu")
     def asr():
-        # 默认 FunASR paraformer-zh-streaming（中文更准）；VOICEMEM_ASR=sherpa 回退到
-        # sherpa-onnx 流式 zipformer（中英双语、纯 onnx 不依赖 torch）。
-        if os.environ.get("VOICEMEM_ASR", "funasr").lower() == "sherpa":
-            from voicemem.utils.audio.asr import StreamingASR
-            from voicemem.utils.common.paths import model_path
-            return StreamingASR(str(model_path(
-                "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20", kind="asr")))
-        from voicemem.utils.audio.asr import FunASRStreamingASR
-        return FunASRStreamingASR()
+        # Nemotron 3.5 ASR Streaming 0.6B (EN/IT) — unico backend ASR.
+        # La lingua viene dalla Memory Space tramite lang.py.
+        from voicemem.utils.audio.asr import NemotronStreamingASR
+        from voicemem.utils.common.paths import models_dir
+        from voicemem.lang import memory_language
+        space_lang = memory_language()
+        model_dir = models_dir() / "asr" / "sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-560ms-int8-2026-06-11"
+        return NemotronStreamingASR(model_dir=model_dir, language=space_lang)
     def vad():
         # 判「说完了」的 VAD。默认内置 silero；换自己的传一个有 is_speech(frame)->bool
         # 的对象即可（VoiceMem(vad=lambda: MyVad()) 或 config 的 vad 段）。
