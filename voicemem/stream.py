@@ -110,6 +110,22 @@ class StreamState:
         return getattr(p, "emotion", "") if p else ""
 
     @property
+    def acoustic_emotion(self) -> str:
+        """Top-1 raw emotion2vec label; does not replace canonical emotion."""
+        p = self._perception
+        return getattr(p, "acoustic_emotion", "") if p else ""
+
+    @property
+    def acoustic_emotion_score(self) -> float:
+        p = self._perception
+        return float(getattr(p, "acoustic_emotion_score", 0.0) or 0.0) if p else 0.0
+
+    @property
+    def acoustic_emotion_scores(self) -> dict[str, float]:
+        p = self._perception
+        return dict(getattr(p, "acoustic_emotion_scores", {}) or {}) if p else {}
+
+    @property
     def speaker_id(self) -> str:
         p = self._perception
         return (getattr(p, "person_id", None) or "") if p else ""

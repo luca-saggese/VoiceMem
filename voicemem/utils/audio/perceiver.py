@@ -47,6 +47,9 @@ class AudioPerception:
     tune_result: Any = None            # 背景音乐/哼唱识别结果
     abnormal_hits: list = field(default_factory=list)  # 异常环境音
     detection: dict = field(default_factory=dict)      # AST 原始一次推理结果
+    acoustic_emotion: str = ""
+    acoustic_emotion_score: float = 0.0
+    acoustic_emotion_scores: dict[str, float] = field(default_factory=dict)
 
 
 # ── AudioPerceiver 组件 ────────────────────────────────────────────────────────
@@ -325,6 +328,13 @@ class AudioPerceiver:
                 from voicemem.utils.audio.emotion.paper_emotion_detector import PaperAlignedEmotionDetector
                 self._cache["emotion_detector"] = PaperAlignedEmotionDetector()
         return self._cache["emotion_detector"]
+
+    def _emotion2vec_classifier(self):
+        with self._lock:
+            if "emotion2vec_classifier" not in self._cache:
+                from voicemem.utils.audio.emotion.emotion2vec import Emotion2VecClassifier
+                self._cache["emotion2vec_classifier"] = Emotion2VecClassifier()
+        return self._cache["emotion2vec_classifier"]
 
     def _music_store(self):
         with self._lock:
@@ -608,6 +618,9 @@ class AudioPerceiver:
         tune_result = None   # voicemem.utils.audio.environment.music_memory.TuneIdentifyResult | None
         abnormal_hits: list[tuple[str, float]] = []
         detection = {"pairs": [], "music": None, "abnormal": [], "embedding": None}
+        acoustic_emotion = ""
+        acoustic_emotion_score = 0.0
+        acoustic_emotion_scores: dict[str, float] = {}
         if audio_path is not None:
             _apath = Path(audio_path)
 
@@ -631,6 +644,17 @@ class AudioPerceiver:
                     emotion = self._emotion_detector().detect(_apath)
                 except Exception as _e:
                     print(f"  [emotion] detection skipped: {_e}", flush=True)
+                try:
+                    import soundfile as sf
+                    samples, sr = sf.read(str(_apath), dtype="float32")
+                    if getattr(samples, "ndim", 1) > 1:
+                        samples = samples[:, 0]
+                    acoustic = self._emotion2vec_classifier().classify(samples, sr)
+                    acoustic_emotion = acoustic.label
+                    acoustic_emotion_score = acoustic.score
+                    acoustic_emotion_scores = acoustic.scores
+                except Exception as _e:
+                    print(f"  [emotion2vec] detection skipped: {_e}", flush=True)
 
         # ── 自我介绍绑定，文本模式（无音频/无声纹时）──────────────────────
         # 声纹分支的绑定纯文本调用走不到。文本通道的 speaker id 是调用方给定的
@@ -670,6 +694,9 @@ class AudioPerceiver:
             tune_result=tune_result,
             abnormal_hits=abnormal_hits,
             detection=detection,
+            acoustic_emotion=acoustic_emotion,
+            acoustic_emotion_score=acoustic_emotion_score,
+            acoustic_emotion_scores=acoustic_emotion_scores,
         )
 
     # ── audiomem 写入段 ────────────────────────────────────────────────────────
