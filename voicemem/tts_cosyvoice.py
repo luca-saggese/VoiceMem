@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import os
 import threading
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -92,6 +93,16 @@ class CosyVoice3TTS:
         error: list[BaseException] = []
         prepared = prepare_instruction(instruction, self.default_language)
 
+        def put_from_worker(item):
+            """Invia un item senza bloccare il thread CosyVoice dopo cancellation."""
+            if loop.is_closed():
+                return
+            future = asyncio.run_coroutine_threadsafe(queue.put(item), loop)
+            try:
+                future.result(timeout=0.5)
+            except (asyncio.TimeoutError, RuntimeError):
+                future.cancel()
+
         def worker():
             try:
                 with self._infer_lock:
@@ -107,11 +118,13 @@ class CosyVoice3TTS:
                             break
                         pcm = _to_pcm16(result)
                         if pcm:
-                            asyncio.run_coroutine_threadsafe(queue.put(pcm), loop).result()
+                            put_from_worker(pcm)
             except BaseException as exc:
                 error.append(exc)
+                if not isinstance(exc, (asyncio.CancelledError, KeyboardInterrupt, SystemExit)):
+                    traceback.print_exc()
             finally:
-                asyncio.run_coroutine_threadsafe(queue.put(_END), loop).result()
+                put_from_worker(_END)
 
         thread = threading.Thread(target=worker, name="cosyvoice3-tts", daemon=True)
         thread.start()

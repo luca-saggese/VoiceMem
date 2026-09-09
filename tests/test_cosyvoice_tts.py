@@ -40,3 +40,29 @@ def test_cosyvoice_stream_uses_worker_and_pcm():
         assert chunks == [(0).to_bytes(2, "little", signed=True) + (16383).to_bytes(2, "little", signed=True)]
 
     asyncio.run(run())
+
+
+def test_cosyvoice_stream_cancellation_does_not_block_event_loop():
+    """La cancellazione del consumer non deve lasciare una put infinita."""
+    import time
+
+    class SlowModel:
+        def inference_instruct2(self, **kwargs):
+            for _ in range(100):
+                time.sleep(0.001)
+                yield {"tts_speech": np.zeros(240, dtype=np.float32)}
+
+    async def run():
+        provider = CosyVoice3TTS(model="unused", ref_audio=__file__)
+        provider._model = SlowModel()
+        stream = provider.stream("ciao")
+        task = asyncio.create_task(stream.__anext__())
+        await asyncio.sleep(0.01)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        await asyncio.sleep(0.05)
+
+    asyncio.run(run())
