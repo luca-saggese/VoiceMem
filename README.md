@@ -35,11 +35,7 @@
   </a>
 </div>
 <p align="center">
-<<<<<<< HEAD
   <img src="assets/wechat.jpg" alt="Gruppo WeChat di VoiceMem" width="60%">
-=======
-  <img src="assets/wechat.png" alt="VoiceMem 微信群" width="60%">
->>>>>>> a450911fc8cbb44c46d810aace2f3288bad287e4
 </p>
 
 ---
@@ -59,15 +55,7 @@ Una panoramica rapida di VoiceMem:
 
 ## 🔥 Novità
 
-<<<<<<< HEAD
 * **27/08/2026 · v0.0.1** — Pubblicati la prima versione di **VoiceMem** e il **Technical Report**.
-=======
-* 💬 **09/01/2026 · [v0.0.2](https://github.com/xzf-thu/VoiceMem/releases/tag/v0.0.2)** — 修复事件日期链路，移除右脑冗余记忆类别，开放可插拔语音合成层。
-* 🎉 **08/27/2026 · [v0.0.1](https://github.com/xzf-thu/VoiceMem/releases/tag/v0.0.1)** — 发布初代 **VoiceMem** 和 **Technical Report**。
-* 🤖 **08/21/2026** — 开源 **VoiceMem 模型系列**，可直接读取并理解 VoiceMem 提供的记忆。
-* 🛠️ **08/21/2026** — 发布 **VoiceMem Utils**，开箱即用。
-* 📦 **08/20/2026** — 开源 **ChatMem-400K** 数据集。
->>>>>>> a450911fc8cbb44c46d810aace2f3288bad287e4
 
 ## 🎬 Demo
 
@@ -76,7 +64,6 @@ Una panoramica rapida di VoiceMem:
 https://github.com/user-attachments/assets/0d919f8c-e9ba-4fdb-8078-b049e4b99a28
 
 
-<<<<<<< HEAD
 ## 📚 Indice
 * [🚀 Avvio rapido](#-avvio-rapido)
 * [🧠 Architettura a doppio cervello in streaming di VoiceMem](#-voicemem-sistema-di-memoria-con-architettura-a-doppio-cervello-in-streaming)
@@ -86,18 +73,6 @@ https://github.com/user-attachments/assets/0d919f8c-e9ba-4fdb-8078-b049e4b99a28
 * [📊 Valutazione](#-valutazione)
 * [Ringraziamenti](#ringraziamenti)
 * [Licenza](#licenza)
-=======
-## 📚 目录
-* [🚀 快速开始](#-快速开始)
-* [🧠 VoiceMem 双脑流式架构](#-voicemem基于流式双脑架构的记忆系统)
-* [🤖 VoiceMem 官方记忆模型](#-voicemem-模型系列)
-* [🔌 使用 VoiceMem 定制你的语音智能体](#-使用-voicemem-定制你的语音智能体)
-* [🛠️ 模型微调](#️-模型微调)
-* [📊 评测代码](#-评测)
-* [📖 引用](#-引用)
-* [致谢](#致谢)
-* [许可证](#许可证)
->>>>>>> a450911fc8cbb44c46d810aace2f3288bad287e4
 
 ## 🚀 Avvio rapido
 
@@ -249,34 +224,7 @@ Poi apri:
 http://localhost:8787
 ```
 
-<<<<<<< HEAD
 ## 🧠 VoiceMem: sistema di memoria con architettura a doppio cervello in streaming
-=======
-Demo 默认把终端输出（含 Python logging 和 Uvicorn 的日志）保存一份到
-`results/logs/voicemem-时间-PID.log`，每行带时间戳和 stdout/stderr 标记。
-启动时终端会打印实际路径。指定文件或临时关闭如下。
-
-```bash
-python web/run.py --log-file results/logs/debug.log
-python web/run.py --no-file-log
-```
-
-回复模型的上下文由当前输入、本次会话尚未入库的对话和检索记忆组成。每轮对话先
-进入内存 SessionBuffer；异步记忆写入完成并确认产生持久记忆后，对应 turn 从
-SessionBuffer 移除。没有产生长期记忆的临时对话会保留到本次会话结束，不同
-Memory Space 和不同 WebSocket 会话互相隔离。
-
-播放期间的插话使用两阶段控制：VAD 首先暂停并保留音频队列；明确停止指令或稳定
-ASR 文本确认后才清空队列并取消回复；附和、回声、无文字声音和单音节碎片会恢复
-播放。候选静音回退和最长等待时间可分别通过 `BARGE_REJECT_SILENCE_MS`、
-`BARGE_CANDIDATE_TIMEOUT_MS` 调整。
-
-两种回复模式共用以 PCM 样本位置为基准的输出时间轴。浏览器 AudioWorklet 回报
-实际渲染进度，打断时只把已经播放的回复写入 SessionBuffer。TTS 后端可选返回
-`TimedAudioChunk` 提供文字对齐；普通 PCM 后端按分段音频长度和动态语速估算。
-
-## 🧠 VoiceMem：基于流式双脑架构的记忆系统
->>>>>>> a450911fc8cbb44c46d810aace2f3288bad287e4
 
 **VoiceMem** è un sistema di memoria progettato per agenti vocali in tempo reale.
 
@@ -308,12 +256,8 @@ Durante una query, VoiceMem **esegue prima il routing, poi il ranking e infine i
 * 💰 **Basso consumo di token** — Usa solo **430 token di memoria**, rispetto ai **6.956 di Mem0** e ai **1.899 di EverMemOS**.
 
 
-<<<<<<< HEAD
 
 ## 🤖 Famiglie di modelli VoiceMem
-=======
-## 🤖 VoiceMem 模型系列
->>>>>>> a450911fc8cbb44c46d810aace2f3288bad287e4
 
 Costruiamo **ChatMem-400K** tramite una pipeline di training OPD in tre fasi:
 
@@ -430,35 +374,7 @@ Se il modello ricevesse la conversazione completa, il benchmark valuterebbe la s
 
 Per il protocollo completo di valutazione e le istruzioni per aggiungere un nuovo benchmark, consulta **[evaluation/README.md](evaluation/README.md)**. Aggiungere un benchmark richiede solo un file e due funzioni.
 
-<<<<<<< HEAD
 ## Ringraziamenti
-=======
-## 📖 引用
-
-如果 VoiceMem 对你的研究有帮助，请引用我们的论文：
-
-```bibtex
-@misc{2608.26005,
-  author = {Zhifei Xie and Jiaqi Lang and Ze An and Yifan Zhao and Dongchao Yang and Kai Li and Ziyang Ma and Mingbao Lin and Chunyan Miao and Shuicheng Yan},
-  title = {{V}oice{M}em: {S}treaming {D}ual-{B}rain {M}emory for {R}eal-{T}ime {I}nteraction},
-  year = {2026},
-  eprint = {2608.26005},
-  note = {arXiv:2608.26005v1}
-}
-```
-
-<div align="center">
-  <a href="https://star-history.dera.page/#xzf-thu/VoiceMem&type=date&legend=top-left">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=xzf-thu/VoiceMem&type=date&theme=dark&legend=top-left" />
-      <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=xzf-thu/VoiceMem&type=date&legend=top-left" />
-      <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=xzf-thu/VoiceMem&type=date&legend=top-left" />
-    </picture>
-  </a>
-</div>
-
-## 致谢
->>>>>>> a450911fc8cbb44c46d810aace2f3288bad287e4
 
 Ringraziamo i seguenti eccellenti progetti open source:
 
