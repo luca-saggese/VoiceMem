@@ -15,6 +15,8 @@ export function useVoiceMem() {
   const [live, setLive] = useState(false);
   const [paused, setPaused] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [activeMemoryIds, setActiveMemoryIds] = useState([]);
+  const sessionsLoaded = useRef(false);
   const socket = useRef(null);
   const mic = useRef({ stream: null, context: null, processor: null, source: null });
   const playback = useRef({ context: null, node: null, ready: null, pending: [], scheduled: [], nextTime: 0, prebuffer: .08, streaming: false, drainPending: false, drainWaiters: [], outputId: '', sampleRate: SAMPLE_RATE, paused: false, workletFailed: false });
@@ -35,6 +37,31 @@ export function useVoiceMem() {
   }, []);
 
   useEffect(() => { loadSpaces(); }, [loadSpaces]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/chat-sessions', { credentials: 'include' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (cancelled) return;
+        const loaded = Array.isArray(data?.sessions) ? data.sessions : [];
+        setSessions(loaded.length ? loaded : [emptySession]);
+        setSessionId(loaded[0]?.id || emptySession.id);
+        sessionsLoaded.current = true;
+      })
+      .catch(() => { sessionsLoaded.current = true; });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!sessionsLoaded.current) return;
+    sessions.forEach((session) => {
+      fetch(`/api/chat-sessions/${encodeURIComponent(session.id)}`, {
+        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(session),
+      }).catch(() => { /* la conversazione resta disponibile localmente */ });
+    });
+  }, [sessions]);
 
   const loadMemories = useCallback(async (id = spaceId) => {
     try {
@@ -179,7 +206,7 @@ export function useVoiceMem() {
     try {
       await ensurePlayback();
       const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-      const connection = new WebSocket(`${protocol}://${location.host}/ws`);
+      const connection = new WebSocket(`${protocol}://${location.host}/ws?space=${encodeURIComponent(spaceId)}`);
       connection.binaryType = 'arraybuffer';
       socket.current = connection;
       connection.onopen = async () => {
@@ -217,7 +244,13 @@ export function useVoiceMem() {
             ? { ...session, turns: [...session.turns, { role: 'user', text: message.text || '' }] } : session));
         }
         if (message.type === 'memory_hits') {
+          const usedIds = [...new Set([
+            ...(message.left_brain || []).map((item) => item.memory_id).filter(Boolean),
+            ...(message.right_brain_hits || []).map((item) => item.memory_id).filter(Boolean),
+          ].map(String))];
+          setActiveMemoryIds(usedIds);
           setRecall({ left: (message.left_brain || []).map((item) => ({ text: item.text, score: Number(item.score || 0) })), right: (message.right_brain_hits || []).filter((item) => !item.internal).map((item) => ({ text: item.content, score: Number(item.priority || 0) })) });
+          loadMemories(spaceId);
         }
         if (message.type === 'answer_start') {
           const state = playback.current;
@@ -237,13 +270,15 @@ export function useVoiceMem() {
           const text = replyRef.current.trim();
           if (text) setSessions((current) => current.map((session) => session.id === sessionIdRef.current
             ? { ...session, turns: [...session.turns, { role: 'assistant', text }] } : session));
-          finishPlayback(); setStatus('In ascolto');
+          finishPlayback();
+          window.setTimeout(() => loadMemories(spaceId), 400);
+          setStatus('In ascolto');
         }
       };
       connection.onerror = () => setStatus('Backend disconnesso');
       connection.onclose = () => { stopMic(); setLive(false); setStatus('Inattivo'); };
     } catch { setStatus('Backend disconnesso'); }
-  }, [close, finishPlayback, live, playPcm, sessionId, stopMic, stopPlayback]);
+  }, [close, finishPlayback, live, loadMemories, playPcm, sessionId, spaceId, stopMic, stopPlayback]);
 
   const togglePause = useCallback(() => {
     setPaused((value) => { const next = !value; pausedRef.current = next; if (next) stopPlayback('pause'); return next; });
@@ -273,5 +308,5 @@ export function useVoiceMem() {
     setReply('Nessuna risposta ancora.');
   }, []);
 
-  return { spaces, spaceId, setSpaceId, sessions, sessionId, setSessionId, liveInput, reply, recall, status, live, paused, audioLevel, sendText, start, togglePause, createSession, loadMemories };
+  return { spaces, spaceId, setSpaceId, sessions, sessionId, setSessionId, liveInput, reply, recall, status, live, paused, audioLevel, activeMemoryIds, sendText, start, togglePause, createSession, loadMemories };
 }

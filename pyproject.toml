@@ -50,6 +50,8 @@ dependencies = [
     "websockets>=14",     # uvicorn gestisce WebSocket; anche examples/05 per realtime lo usa
     "sounddevice",        # agent vocale negli examples: microfono + altoparlante
     "pywebrtc-audio",     # cancellazione eco (può interrompere quando si usa l'altoparlante)
+    "av>=14",              # codec Opus per il trasporto WebSocket Xiaozhi
+    "cryptography",        # AES-CTR per l'audio UDP del broker MQTT Xiaozhi
 ]
 
 [project.optional-dependencies]

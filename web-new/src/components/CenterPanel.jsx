@@ -14,7 +14,7 @@ export function CenterPanel({ liveInput, reply, recall, status, audioLevel, onSe
     const glow = document.createElement('canvas');
     const glowContext = glow.getContext('2d');
     const strands = 3; const lines = 7; const points = 88; const spacing = .06;
-    const base = .34; const shrink = .45; const idleAmp = .14; const liveAmp = 1;
+    const base = .27; const shrink = .45; const idleAmp = .14; const liveAmp = 1;
     const idleSpeed = .10; const liveSpeed = .5; const rotation = .5; const liveRotation = 1.2;
     const spread = .3; const lineWidth = 1.1; const squish = .88;
     let orbLevel = 0; let orbPhase = 0; let orbRotation = 0; let last = performance.now(); let accumulator = 0;

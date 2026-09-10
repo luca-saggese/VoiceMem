@@ -117,6 +117,12 @@ def hits_payload(result, has_audio=None, cluster_of=None):
     前端据此决定要不要在这一轮自动把当时那段原声放回来。"""
     rb = getattr(result, "rb_hits", None) or []
     cls = getattr(result, "classification", None)
+    def right_memory_id(hit):
+        metadata = getattr(hit, "metadata", None) or {}
+        return (getattr(hit, "memory_id", None)
+                or metadata.get("trait_id")
+                or metadata.get("memory_id")
+                or metadata.get("right_memory_id"))
     return {
         # slot 和情绪跟着这一轮的检索结果一起发。前端原来是另发一次
         # /api/classify 再等它回来——那是条竞态：memory_hits 先到时 curSlots
@@ -134,6 +140,7 @@ def hits_payload(result, has_audio=None, cluster_of=None):
         # 情绪，下次先问"），对模型有用，但它不是关于用户的画像——摆在页面的
         # 「右脑·画像」栏里用户看着莫名其妙。前端据此跳过显示，脑图匹配仍照用。
         "right_brain_hits": [{"content": clean_rb(h.content), "raw": h.content,
+                  "memory_id": right_memory_id(h),
                               "internal": h.source == "response_experience",
                               # profile 类命中是 **slot 级**的画像（"喜好与厌恶：…"），
                               # 而脑图节点是 **实体**级的，按正文永远匹配不上——右脑
@@ -164,10 +171,17 @@ def build_app(mode, session, classify, snapshot=None, audio_of=None, spaces=None
     async def ws(sock: WebSocket):
         await sock.accept()
         await sock.send_json({"type": "session_ready", "mode": mode})
+        reset_user = None
+        set_websocket_user = getattr(app.state, "set_websocket_user", None)
+        if set_websocket_user:
+            reset_user = set_websocket_user(sock)
         try:
             await session(sock)
         except WebSocketDisconnect:
             pass          # 关页面/刷新是正常结束，别刷一屏 traceback
+        finally:
+            if reset_user:
+                reset_user()
 
     class Q(BaseModel):
         query: str

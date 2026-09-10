@@ -22,7 +22,10 @@ Nota: i vettori di memoria usano E5 locale a 384 dimensioni (non puoi usare la r
 import argparse
 import asyncio
 import base64
+import contextvars
 import faulthandler
+import hashlib
+import hmac
 import json
 import os
 import re
@@ -33,6 +36,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import uvicorn
+from fastapi import HTTPException, Request, WebSocket
+from fastapi.responses import FileResponse, JSONResponse
 
 # I backend audio locali (torch/CosyVoice/sherpa) possono terminare il processo
 # con un SIGSEGV nativo: abilita uno stack Python utile invece di lasciare solo
@@ -1013,6 +1018,19 @@ REPLY = CONFIG.get("reply")                           # 传给 utils 的回复�
 #: 同一进程内建第二个实例几乎不花钱：模型是懒加载 + 进程内复用的，实测建实例
 #: 0.0s、预热 2.5s（第一个是 6.8s + 4.9s）。所以切换空间不用重启服务。
 _SPACES: dict = {}
+_CURRENT_USER_ID = contextvars.ContextVar("voicemem_user_id", default="anonymous")
+_CURRENT_SPACE = contextvars.ContextVar("voicemem_space", default=ARGS.space)
+
+
+def current_space() -> str:
+    return _CURRENT_SPACE.get()
+
+
+class _UserVoiceMemProxy:
+    """Risolvi l’istanza VoiceMem nel contesto della richiesta corrente."""
+
+    def __getattr__(self, name):
+        return getattr(get_space(current_space()), name)
 
 
 def space_dir(name: str):
@@ -1021,21 +1039,29 @@ def space_dir(name: str):
     safe = _re.sub(r"[^0-9A-Za-z\u4e00-\u9fff_-]", "", (name or "").strip())[:32]
     if not safe:
         raise ValueError("空间名字不能为空")
-    return _ROOT / "voicemem_memoryspace" / safe, safe
+    user_id = _CURRENT_USER_ID.get()
+    root = _ROOT / "voicemem_memoryspace"
+    if user_id != "anonymous":
+        root = root / f"user_{user_id}"
+    return root / safe, safe
 
 
 def get_space(name: str):
     """取（必要时创建）这个空间的 VoiceMem。"""
     _, safe = space_dir(name)
-    if safe not in _SPACES:
+    key = (_CURRENT_USER_ID.get(), safe)
+    if key not in _SPACES:
+        directory, _ = space_dir(safe)
         cfg = dict(CONFIG)
         cfg["space"] = safe
+        cfg["memory_root"] = str(directory)
+        cfg["user_id"] = _CURRENT_USER_ID.get()
         t0 = time.monotonic()
         inst = VoiceMem.from_config(cfg)
         inst.warmup(verbose=False)
-        _SPACES[safe] = inst
+        _SPACES[key] = inst
         print(f"[space] apertura di {safe!r}: {time.monotonic()-t0:.1f}s", flush=True)
-    return _SPACES[safe]
+    return _SPACES[key]
 
 
 def use_space(name: str) -> str:
@@ -1045,8 +1071,8 @@ def use_space(name: str) -> str:
     不用把实例一路传下去。注意 build_app 收的那几个回调必须是 lambda 而不是
     ``vm.classify`` 这种绑定方法，绑定方法会把切换前那个实例焊死。
     """
-    global vm, ACTIVE_SPACE, SPACE_LANG
-    vm = get_space(name)
+    global ACTIVE_SPACE, SPACE_LANG
+    _CURRENT_SPACE.set(name)
     _, ACTIVE_SPACE = space_dir(name)
     SPACE_LANG = space_language(ACTIVE_SPACE)
     _set_lang(SPACE_LANG)            # 记忆语言跟着空间走
@@ -1057,6 +1083,9 @@ def list_spaces() -> list:
     """磁盘上有哪些 Memory Space，各有多少条记忆。"""
     import sqlite3
     root = _ROOT / "voicemem_memoryspace"
+    user_id = _CURRENT_USER_ID.get()
+    if user_id != "anonymous":
+        root = root / f"user_{user_id}"
     out = []
     for d in sorted(p for p in root.glob("*") if p.is_dir()):
         n = 0
@@ -1093,7 +1122,7 @@ def create_space(name: str, language: str = "") -> dict:
 
 
 ACTIVE_SPACE = ""
-vm = None
+vm = _UserVoiceMemProxy()
 use_space(ARGS.space)
 
 
@@ -3008,6 +3037,7 @@ def right_brain_tree(uid, facts):
     out = []
     for t in traits:
         out.append({
+            "id": t.id,
             "cluster": t.cluster,
             "slot": t.slot,
             # 节点标题用人话版；还没改写好就是原文，下一次轮询会换上来。
@@ -3203,6 +3233,192 @@ app = utils.build_app(MODE, realtime_session if MODE == "realtime" else llm_tts_
                       set_lang=set_lang)
 from auth import attach_auth_routes  # noqa: E402
 AUTH = attach_auth_routes(app)
+
+
+@app.middleware("http")
+async def set_http_context(request, call_next):
+    user = AUTH.user_from_session_token(request.cookies.get(AUTH.cookie_name, ""))
+    user_token = _CURRENT_USER_ID.set(str(user["id"]) if user else "anonymous")
+    space = request.query_params.get("space", "").strip()
+    space_token = _CURRENT_SPACE.set(space) if space else None
+    try:
+        return await call_next(request)
+    finally:
+        if space_token:
+            _CURRENT_SPACE.reset(space_token)
+        _CURRENT_USER_ID.reset(user_token)
+
+
+def _set_websocket_context(sock):
+    user = AUTH.user_from_session_token(sock.cookies.get(AUTH.cookie_name, ""))
+    user_token = _CURRENT_USER_ID.set(str(user["id"]) if user else "anonymous")
+    space = sock.query_params.get("space", "").strip()
+    space_token = _CURRENT_SPACE.set(space or ARGS.space)
+
+    def reset():
+        _CURRENT_SPACE.reset(space_token)
+        _CURRENT_USER_ID.reset(user_token)
+
+    return reset
+
+
+app.state.set_websocket_user = _set_websocket_context
+
+
+@app.websocket("/xiaozhi/v1/")
+async def xiaozhi_websocket(sock: WebSocket):
+    """Endpoint Xiaozhi: Opus in ingresso, VoiceMem, Opus TTS in uscita."""
+    device_id = sock.headers.get("device-id") or sock.query_params.get("device-id", "")
+    authorization = sock.headers.get("authorization", "")
+    device = AUTH.authenticate_device(device_id, authorization)
+    if not device:
+        await sock.accept()
+        await sock.send_text("认证失败")
+        await sock.close(code=1008)
+        return
+    await sock.accept()
+    user_token = _CURRENT_USER_ID.set(str(device["id"]))
+    space_token = _CURRENT_SPACE.set(ARGS.space)
+    try:
+        from xiaozhi import XiaozhiAudio, XiaozhiTransport, read_hello
+        session_id = uuid.uuid4().hex
+        await read_hello(sock, session_id)
+        transport = XiaozhiTransport(
+            sock, XiaozhiAudio(sock), session_id,
+            mqtt_gateway=sock.query_params.get("from") == "mqtt_gateway",
+        )
+        owner = {"id": "", "last": "", "miss": 0}
+        speech_rate = SpeechRateEstimator()
+        context_session = f"xiaozhi-{device_id}-{session_id}"
+        async for pending in _session_anticipate(context_session, transport):
+            timeline = AudioTimeline(prebuffer_seconds=0.16, rate_estimator=speech_rate)
+            await voicemem_llm_tts(
+                pending, transport.send_json, transport.send_audio, owner, timeline,
+                context_session=context_session, context_space=ACTIVE_SPACE,
+                memory_vm=vm,
+            )
+            AUTH.append_device_turn(device["id"], device_id, pending.text, transport.reply_text)
+    except Exception as exc:
+        print(f"[xiaozhi] sessione fallita device={device_id}: {type(exc).__name__}: {exc}", flush=True)
+        try:
+            await sock.close(code=1011)
+        except Exception:
+            pass
+    finally:
+        _CURRENT_SPACE.reset(space_token)
+        _CURRENT_USER_ID.reset(user_token)
+
+
+@app.get("/xiaozhi/ota/")
+def xiaozhi_ota_info():
+    return os.environ.get("VOICEMEM_XIAOZHI_WS_URL", f"ws://127.0.0.1:{ARGS.port}/xiaozhi/v1/")
+
+
+@app.post("/xiaozhi/ota/")
+async def xiaozhi_ota(request: Request):
+    device_id = request.headers.get("device-id", "").strip()
+    normalized_device_id = device_id.lower()
+    device = AUTH.authenticate_device(device_id, request.headers.get("authorization", ""))
+    if not re.fullmatch(r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}", device_id):
+        raise HTTPException(status_code=400, detail="Device-Id Xiaozhi non valido")
+    response = {
+        "server_time": {"timestamp": int(time.time() * 1000), "timezone_offset": 0},
+        "firmware": {"version": os.environ.get("VOICEMEM_XIAOZHI_FIRMWARE_VERSION", ""), "url": ""},
+        "websocket": {
+            "url": os.environ.get("VOICEMEM_XIAOZHI_WS_URL", f"ws://127.0.0.1:{ARGS.port}/xiaozhi/v1/"),
+            "token": os.environ.get("VOICEMEM_XIAOZHI_DEVICE_TOKEN", ""),
+        },
+    }
+    if not device:
+        activation_code = normalized_device_id.replace(":", "")
+        response["activation"] = {
+            "code": activation_code.upper(),
+            "message": f"Dispositivo non registrato. Registra il MAC: {activation_code.upper()}",
+            "timeout_ms": int(os.environ.get("VOICEMEM_XIAOZHI_ACTIVATION_TIMEOUT_MS", "60000")),
+        }
+        print(f"[xiaozhi][ota] device non registrato device_id={normalized_device_id}; activation restituita", flush=True)
+        return response
+    mqtt_enabled = os.environ.get("VOICEMEM_XIAOZHI_MQTT_ENABLED", "0").lower() in {"1", "true", "yes", "on"}
+    mqtt_endpoint = os.environ.get("VOICEMEM_XIAOZHI_MQTT_ENDPOINT", os.environ.get("MQTT_ENDPOINT", "")).strip()
+    if mqtt_enabled and not mqtt_endpoint:
+        mqtt_endpoint = os.environ.get("VOICEMEM_PUBLIC_IP", "127.0.0.1").strip()
+    signature_key = os.environ.get("VOICEMEM_XIAOZHI_MQTT_SIGNATURE_KEY", os.environ.get("MQTT_SIGNATURE_KEY", ""))
+    if mqtt_endpoint and signature_key:
+        client_id = request.headers.get("client-id", "") or uuid.uuid4().hex
+        mac_id = device_id.replace(":", "_").lower()
+        mqtt_client_id = f"{os.environ.get('VOICEMEM_XIAOZHI_MQTT_GROUP_ID', 'GID_default')}@@@{mac_id}@@@{client_id}"
+        mqtt_username = base64.b64encode(json.dumps({"ip": os.environ.get("VOICEMEM_PUBLIC_IP", "")}).encode()).decode()
+        mqtt_password = base64.b64encode(hmac.new(
+            signature_key.encode(), f"{mqtt_client_id}|{mqtt_username}".encode(), hashlib.sha256
+        ).digest()).decode()
+        response["mqtt"] = {
+            "endpoint": mqtt_endpoint,
+            "port": int(os.environ.get("VOICEMEM_XIAOZHI_MQTT_PORT", "1883")),
+            "client_id": mqtt_client_id,
+            "username": mqtt_username,
+            "password": mqtt_password,
+            "publish_topic": "device-server",
+            "subscribe_topic": f"devices/p2p/{mac_id}",
+        }
+        response["udp"] = {
+            "endpoint": os.environ.get("VOICEMEM_XIAOZHI_UDP_ENDPOINT", os.environ.get("UDP_GATEWAY", mqtt_endpoint)),
+        }
+    return response
+
+
+@app.post("/activate")
+@app.post("/xiaozhi/activate/")
+async def xiaozhi_activate(request: Request):
+    device_id = request.headers.get("device-id", "").strip()
+    if not re.fullmatch(r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}", device_id):
+        raise HTTPException(status_code=400, detail="Device-Id Xiaozhi non valido")
+    normalized_device_id = device_id.lower()
+    device = AUTH.authenticate_device(device_id, request.headers.get("authorization", ""))
+    if device:
+        return {"code": 0, "message": "Device già registrato", "device_id": normalized_device_id}
+    print(f"[xiaozhi][activate] device_id={normalized_device_id}; registrazione manuale ancora necessaria", flush=True)
+    return JSONResponse(
+        status_code=202,
+        content={
+            "code": 202,
+            "message": "Registrazione in attesa: associa il MAC dal pannello Devices",
+            "device_id": normalized_device_id,
+            "pending": True,
+        },
+    )
+
+
+@app.get("/xiaozhi/ota/download/{filename}")
+def xiaozhi_firmware(filename: str):
+    firmware_root = Path(os.environ.get("VOICEMEM_XIAOZHI_FIRMWARE_DIR", str(_ROOT / "data" / "bin"))).resolve()
+    safe_name = Path(filename).name
+    if safe_name != filename or not safe_name.endswith(".bin"):
+        raise HTTPException(status_code=404, detail="Firmware non trovato")
+    path = (firmware_root / safe_name).resolve()
+    if firmware_root not in path.parents or not path.is_file():
+        raise HTTPException(status_code=404, detail="Firmware non trovato")
+    return FileResponse(path, media_type="application/octet-stream", filename=safe_name)
+
+
+@app.on_event("startup")
+async def start_xiaozhi_mqtt():
+    if os.environ.get("VOICEMEM_XIAOZHI_MQTT_ENABLED", "0").lower() not in {"1", "true", "yes", "on"}:
+        return
+    from xiaozhi_mqtt import XiaozhiMqttBroker
+    websocket_url = os.environ.get(
+        "VOICEMEM_XIAOZHI_INTERNAL_WS_URL",
+        f"ws://127.0.0.1:{ARGS.port}/xiaozhi/v1/?from=mqtt_gateway",
+    )
+    broker = XiaozhiMqttBroker(websocket_url, authenticate_device=lambda device_id: AUTH.authenticate_device(device_id))
+    await broker.start()
+    app.state.xiaozhi_mqtt_broker = broker
+
+
+@app.on_event("shutdown")
+async def stop_xiaozhi_mqtt():
+    broker = getattr(app.state, "xiaozhi_mqtt_broker", None)
+    if broker:
+        await broker.stop()
 
 
 if __name__ == "__main__":

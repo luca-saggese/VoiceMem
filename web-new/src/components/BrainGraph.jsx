@@ -17,7 +17,7 @@ function makeNode(node) {
   return { ...node, r: node.kind === 'user' ? 8 : node.kind === 'emotion' ? 5 : node.kind === 'exper' ? 4.6 : node.kind === 'prefer' ? 4.8 : 3, ph: Math.random() * 6.28, ph2: Math.random() * 6.28, sp: .28 + Math.random() * .4, ax: .5 + Math.random() * .9, ay: .5 + Math.random() * .9, iv: 0, h: 0, p: 0, hit: 0, hitT: 0, act: 0, bw: 0, bh: 0, dl: node.dl ?? ((performance.now() / 1000) + Math.random() * .3), sx: 0, sy: 0, x: 0, y: 0 };
 }
 
-export function BrainGraph({ memories = { left: [], right: [] } }) {
+export function BrainGraph({ memories = { left: [], right: [] }, activeMemoryIds = [] }) {
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
   const nodesRef = useRef([]);
@@ -73,6 +73,14 @@ export function BrainGraph({ memories = { left: [], right: [] } }) {
       const id = add({ kind, side: 'R', cluster, w: String(memory.text || '').slice(0, 40), detail: memory });
       link(labelIds.get(cluster), id, 'in', .34);
       if (!byCluster.has(cluster)) byCluster.set(cluster, []); byCluster.get(cluster).push(id);
+    });
+    const activeIds = new Set(activeMemoryIds.map(String));
+    nodes.forEach((node) => {
+      const memoryId = node.detail?.id ?? node.detail?.memory_id;
+      if (memoryId != null && activeIds.has(String(memoryId))) {
+        node.act = 1;
+        node.hit = 1;
+      }
     });
     byEntity.forEach((ids) => {
       const unique = [...new Set(ids)];
@@ -269,7 +277,7 @@ export function BrainGraph({ memories = { left: [], right: [] } }) {
     canvas.addEventListener('pointermove', onPointerMove, { passive: true }); canvas.addEventListener('pointerleave', onPointerLeave, { passive: true });
     const observer = new ResizeObserver(resize); observer.observe(wrap); image?.addEventListener('load', resize); resize(); frame = requestAnimationFrame(draw);
     return () => { cancelAnimationFrame(frame); observer.disconnect(); image?.removeEventListener('load', resize); canvas.removeEventListener('pointermove', onPointerMove); canvas.removeEventListener('pointerleave', onPointerLeave); };
-  }, [memories]);
+  }, [activeMemoryIds, memories]);
 
   return <div className="brainwrap"><img ref={imageRef} className="brain" src="/images/background.webp" alt="" /><canvas ref={canvasRef} className="fx" /><div ref={cardRef} className="memory-card"><div className="memory-card-head"><i className="memory-card-swatch" /><span className="memory-card-kind">entity</span><span className="memory-card-id">#0000</span></div><div className="memory-card-content">...</div><div className="memory-card-foot"><span className="memory-card-source">-</span></div></div><div className="legend"><span><i className="left-dot" />Sinistro · fatti</span><span><i className="right-dot" />Destro · profilo</span></div></div>;
 }

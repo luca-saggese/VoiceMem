@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import smtplib
 import sqlite3
@@ -28,6 +29,7 @@ class AuthService:
         self.db_path = Path(os.environ.get("VOICEMEM_AUTH_DB", str(default_db))).expanduser()
         self.frontend_url = os.environ.get("VOICEMEM_PUBLIC_URL", "http://127.0.0.1:5174").rstrip("/")
         self.cookie_name = "voicemem_session"
+        self.require_email_confirmation = os.environ.get("VOICEMEM_REQUIRE_EMAIL_CONFIRMATION", "1").strip().lower() not in {"0", "false", "no", "off"}
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
@@ -61,6 +63,25 @@ class AuthService:
                     expires_at TEXT NOT NULL,
                     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
                 );
+                CREATE TABLE IF NOT EXISTS chat_sessions (
+                    id TEXT NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    title TEXT NOT NULL DEFAULT 'Nuova conversazione',
+                    turns_json TEXT NOT NULL DEFAULT '[]',
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(id, user_id),
+                    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+                );
+                CREATE TABLE IF NOT EXISTS devices (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    device_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(user_id, device_id),
+                    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_device_id ON devices(device_id);
             """)
 
     @staticmethod
@@ -110,6 +131,12 @@ class AuthService:
     def _public_user(self, row: sqlite3.Row) -> dict:
         return {"id": row["id"], "email": row["email"], "display_name": row["display_name"] or row["email"]}
 
+    def _user_id_from_request(self, request: Request) -> int:
+        user = self.user_from_request(request)
+        if not user:
+            raise HTTPException(401, "Non autenticato")
+        return int(user["id"])
+
     def _issue_token(self, db: sqlite3.Connection, user_id: int, kind: str, hours: int) -> str:
         token = secrets.token_urlsafe(40)
         db.execute("INSERT INTO tokens(token_hash,user_id,kind,expires_at) VALUES(?,?,?,?)", (self._token_hash(token), user_id, kind, self._stamp(self._now() + timedelta(hours=hours))))
@@ -148,19 +175,21 @@ class AuthService:
         user_id = None
         with self._connect() as db:
             try:
-                cursor = db.execute("INSERT INTO users(email,password_hash,created_at) VALUES(?,?,?)", (email, self._password_hash(password), self._stamp(self._now())))
+                cursor = db.execute("INSERT INTO users(email,password_hash,email_verified,created_at) VALUES(?,?,?,?)", (email, self._password_hash(password), int(not self.require_email_confirmation), self._stamp(self._now())))
             except sqlite3.IntegrityError:
                 raise HTTPException(409, "Esiste già un account con questa email")
             user_id = cursor.lastrowid
-            token = self._issue_token(db, cursor.lastrowid, "verify", 24)
-        try:
-            self._send_verification(email, token)
-        except Exception as exc:
-            with self._connect() as db:
-                db.execute("DELETE FROM tokens WHERE user_id=?", (user_id,))
-                db.execute("DELETE FROM users WHERE id=? AND email_verified=0", (user_id,))
-            raise HTTPException(503, f"Impossibile inviare l'email di conferma: {exc}")
-        return {"message": "Controlla la posta e conferma il tuo account prima di accedere"}
+            token = self._issue_token(db, cursor.lastrowid, "verify", 24) if self.require_email_confirmation else ""
+        if self.require_email_confirmation:
+            try:
+                self._send_verification(email, token)
+            except Exception as exc:
+                with self._connect() as db:
+                    db.execute("DELETE FROM tokens WHERE user_id=?", (user_id,))
+                    db.execute("DELETE FROM users WHERE id=? AND email_verified=0", (user_id,))
+                raise HTTPException(503, f"Impossibile inviare l'email di conferma: {exc}")
+        message = "Controlla la posta e conferma il tuo account prima di accedere" if self.require_email_confirmation else "Account creato. Ora puoi accedere"
+        return {"message": message}
 
     def verify(self, token: str) -> None:
         with self._connect() as db:
@@ -176,7 +205,7 @@ class AuthService:
             row = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
             if not row or not self._check_password(password, row["password_hash"]):
                 raise HTTPException(401, "Email o password non corretti")
-            if not row["email_verified"]:
+            if self.require_email_confirmation and not row["email_verified"]:
                 raise HTTPException(403, "Conferma prima il tuo indirizzo email")
             return self._public_user(row), self._create_session(db, row["id"])
 
@@ -186,14 +215,102 @@ class AuthService:
         return token
 
     def user_from_request(self, request: Request) -> dict | None:
-        token = request.cookies.get(self.cookie_name)
+        return self.user_from_session_token(request.cookies.get(self.cookie_name, ""))
+
+    def user_from_session_token(self, token: str) -> dict | None:
         if not token:
             return None
         with self._connect() as db:
             row = db.execute("SELECT users.*,sessions.expires_at AS session_expires FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token_hash=?", (self._token_hash(token),)).fetchone()
-            if not row or datetime.fromisoformat(row["session_expires"]) < self._now() or not row["email_verified"]:
+            if not row or datetime.fromisoformat(row["session_expires"]) < self._now() or (self.require_email_confirmation and not row["email_verified"]):
                 return None
             return self._public_user(row)
+
+    def list_chat_sessions(self, request: Request) -> list[dict]:
+        user_id = self._user_id_from_request(request)
+        with self._connect() as db:
+            rows = db.execute("SELECT id,title,turns_json FROM chat_sessions WHERE user_id=? AND id NOT LIKE 'xiaozhi:%' ORDER BY updated_at DESC", (user_id,)).fetchall()
+        result = []
+        for row in rows:
+            try:
+                turns = json.loads(row["turns_json"])
+            except (TypeError, ValueError):
+                turns = []
+            result.append({"id": row["id"], "title": row["title"], "turns": turns if isinstance(turns, list) else []})
+        return result
+
+    def append_device_turn(self, user_id: int, device_id: str, user_text: str, reply_text: str) -> None:
+        """Aggiorna la singola conversazione persistente assegnata al device."""
+        session_id = f"xiaozhi:{str(device_id).strip()}"
+        turns = [{"role": "user", "text": user_text.strip()}]
+        if reply_text.strip():
+            turns.append({"role": "assistant", "text": reply_text.strip()})
+        with self._connect() as db:
+            row = db.execute("SELECT turns_json FROM chat_sessions WHERE id=? AND user_id=?", (session_id, user_id)).fetchone()
+            if row:
+                try:
+                    existing = json.loads(row["turns_json"])
+                except (TypeError, ValueError):
+                    existing = []
+                turns = (existing if isinstance(existing, list) else []) + turns
+            db.execute(
+                "INSERT INTO chat_sessions(id,user_id,title,turns_json,updated_at) VALUES(?,?,?,?,?) "
+                "ON CONFLICT(id,user_id) DO UPDATE SET turns_json=excluded.turns_json,updated_at=excluded.updated_at",
+                (session_id, user_id, f"Device {device_id}", json.dumps(turns, ensure_ascii=False), self._stamp(self._now())),
+            )
+
+    def save_chat_session(self, request: Request, session: dict) -> dict:
+        user_id = self._user_id_from_request(request)
+        session_id = str(session.get("id", "")).strip()
+        if not session_id or len(session_id) > 120:
+            raise HTTPException(400, "ID sessione non valido")
+        title = str(session.get("title", "Nuova conversazione"))[:200]
+        turns = session.get("turns", [])
+        if not isinstance(turns, list) or len(turns) > 500:
+            raise HTTPException(400, "Sessione non valida")
+        payload = json.dumps(turns, ensure_ascii=False)
+        with self._connect() as db:
+            db.execute("INSERT INTO chat_sessions(id,user_id,title,turns_json,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(id,user_id) DO UPDATE SET title=excluded.title,turns_json=excluded.turns_json,updated_at=excluded.updated_at", (session_id, user_id, title, payload, self._stamp(self._now())))
+        return {"id": session_id, "title": title, "turns": turns}
+
+    def delete_chat_session(self, request: Request, session_id: str) -> None:
+        user_id = self._user_id_from_request(request)
+        with self._connect() as db:
+            db.execute("DELETE FROM chat_sessions WHERE id=? AND user_id=?", (session_id, user_id))
+
+    def list_devices(self, request: Request) -> list[dict]:
+        user_id = self._user_id_from_request(request)
+        with self._connect() as db:
+            rows = db.execute("SELECT id,device_id,name,created_at FROM devices WHERE user_id=? ORDER BY created_at ASC", (user_id,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def add_device(self, request: Request, device_id: str, name: str) -> dict:
+        user_id = self._user_id_from_request(request)
+        device_id = str(device_id or "").strip()
+        name = str(name or "").strip()
+        if not (device_id.isdigit() and len(device_id) == 6) and not re.fullmatch(r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}", device_id):
+            raise HTTPException(400, "L'identificativo deve essere di 6 numeri o un MAC address Xiaozhi")
+        if not name or len(name) > 80:
+            raise HTTPException(400, "Inserisci un nome valido per il device")
+        with self._connect() as db:
+            if db.execute("SELECT 1 FROM devices WHERE device_id=?", (device_id,)).fetchone():
+                raise HTTPException(409, "Questo device è già associato a un account")
+            try:
+                cursor = db.execute("INSERT INTO devices(user_id,device_id,name,created_at) VALUES(?,?,?,?)", (user_id, device_id, name, self._stamp(self._now())))
+            except sqlite3.IntegrityError:
+                raise HTTPException(409, "Questo device è già registrato")
+            row = db.execute("SELECT id,device_id,name,created_at FROM devices WHERE id=?", (cursor.lastrowid,)).fetchone()
+        return dict(row)
+
+    def authenticate_device(self, device_id: str, authorization: str = "") -> dict | None:
+        device_id = str(device_id or "").strip()
+        token = authorization.removeprefix("Bearer ").strip()
+        expected_token = os.environ.get("VOICEMEM_XIAOZHI_DEVICE_TOKEN", "").strip()
+        if expected_token and not hmac.compare_digest(token, expected_token):
+            return None
+        with self._connect() as db:
+            row = db.execute("SELECT users.id,users.email,users.display_name,devices.device_id,devices.name FROM devices JOIN users ON users.id=devices.user_id WHERE lower(devices.device_id)=lower(?)", (device_id,)).fetchone()
+        return dict(row) if row else None
 
     def logout(self, request: Request) -> None:
         token = request.cookies.get(self.cookie_name)
@@ -269,6 +386,7 @@ class AuthService:
 def attach_auth_routes(app) -> AuthService:
     from fastapi import Request
     auth = AuthService()
+    app.state.auth_service = auth
 
     @app.get("/api/auth/me")
     def auth_me(request: Request):
@@ -311,6 +429,30 @@ def attach_auth_routes(app) -> AuthService:
     async def auth_reset(request: Request):
         body = await request.json()
         return auth.reset(body.get("token", ""), body.get("password", ""), body.get("password_confirmation", ""))
+
+    @app.get("/api/chat-sessions")
+    def chat_sessions(request: Request):
+        return {"sessions": auth.list_chat_sessions(request)}
+
+    @app.put("/api/chat-sessions/{session_id}")
+    async def chat_session_save(request: Request, session_id: str):
+        body = await request.json()
+        body["id"] = session_id
+        return auth.save_chat_session(request, body)
+
+    @app.delete("/api/chat-sessions/{session_id}")
+    def chat_session_delete(request: Request, session_id: str):
+        auth.delete_chat_session(request, session_id)
+        return {"ok": True}
+
+    @app.get("/api/devices")
+    def devices(request: Request):
+        return {"devices": auth.list_devices(request)}
+
+    @app.post("/api/devices")
+    async def device_add(request: Request):
+        body = await request.json()
+        return auth.add_device(request, body.get("device_id", ""), body.get("name", ""))
 
     @app.get("/api/auth/google/start")
     def auth_google_start():
