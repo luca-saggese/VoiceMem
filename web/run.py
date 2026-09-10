@@ -286,7 +286,7 @@ def _write_space_language(name: str, lang: str) -> None:
         doc.setdefault("space", {})["language"] = lang
         f.write_text(_json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as e:
-        print(f"[space] 写语言失败（不影响使用）：{e}", flush=True)
+        print(f"[space] impossibile salvare la lingua (non blocca l'esecuzione): {e}", flush=True)
 
 
 def set_lang(lang: str) -> None:
@@ -298,7 +298,7 @@ def set_lang(lang: str) -> None:
     """
     global UI_LANG
     UI_LANG = "en" if str(lang).lower().startswith("en") else "it"
-    print(f"[lang] 界面切到 {UI_LANG}（空间「{ACTIVE_SPACE}」仍是 {SPACE_LANG}）",
+    print(f"[lang] UI={UI_LANG}; spazio {ACTIVE_SPACE!r} mantiene lingua={SPACE_LANG}",
           flush=True)
 
 
@@ -938,7 +938,7 @@ def _finish_history_turn(turn_id: str, result: dict) -> None:
     _SESSION_CONTEXT.mark_complete(turn_id, committed)
     if BARGE_DEBUG:
         state = "已进入长期记忆，移出 SessionBuffer" if committed else "未入库，保留短期上下文"
-        print(f"[context] turn={turn_id[:8] or '-'} {state}", flush=True)
+        print(f"[context] turno={turn_id[:8] or '-'} {state}", flush=True)
 
 
 def _realtime_instructions(memory_context: str, stranger: bool = False,
@@ -1034,7 +1034,7 @@ def get_space(name: str):
         inst = VoiceMem.from_config(cfg)
         inst.warmup(verbose=False)
         _SPACES[safe] = inst
-        print(f"[space] 打开「{safe}」用了 {time.monotonic()-t0:.1f}s", flush=True)
+        print(f"[space] apertura di {safe!r}: {time.monotonic()-t0:.1f}s", flush=True)
     return _SPACES[safe]
 
 
@@ -1088,7 +1088,7 @@ def create_space(name: str, language: str = "") -> dict:
     get_space(safe)                      # 建库 + 预热
     lang = "en" if str(language or ARGS.lang).lower().startswith("en") else "it"
     _write_space_language(safe, lang)    # 建的时候定一次，之后不再变
-    print(f"[space] 新建「{safe}」（语言 {lang}）→ {d}", flush=True)
+    print(f"[space] creato {safe!r} (lingua={lang}) → {d}", flush=True)
     return {"id": safe, "name": safe, "count": 0, "language": lang}
 
 
@@ -1265,12 +1265,12 @@ def _kick_acoustic(send, audio_path: str) -> None:
             emo, score = await asyncio.to_thread(_acoustic_emotion, audio_path)
             take = bool(emo) and score >= ACOUSTIC_MIN_SCORE and emo in ACOUSTIC_TRUST
             if BARGE_DEBUG:
-                print(f"  [emotion] 声学(后台) {(time.monotonic()-t0)*1000:.0f}ms "
-                      f"-> {emo or '-'} {score:.2f}（{'采纳' if take else '不采纳'}）", flush=True)
+                    print(f"  [emotion] acustica (background) {(time.monotonic()-t0)*1000:.0f}ms "
+                        f"-> {emo or '-'} {score:.2f} ({'accepted' if take else 'ignored'})", flush=True)
             if take:
                 await send({"type": "tag_update", "emotion": emo, "emotion_from": "acoustic"})
         except Exception as e:
-            print(f"[web] 后台声学情绪跳过：{type(e).__name__}: {e}", flush=True)
+            print(f"[web] emozione acustica saltata: {type(e).__name__}: {e}", flush=True)
 
     asyncio.create_task(run())
 
@@ -1319,7 +1319,7 @@ def fill_tags(payload: dict, text: str, audio_path: str = "",
                 payload["emotion"] = emo
                 payload["emotion_from"] = "semantic"
         except Exception as e:
-            print(f"[web] 语义情绪跳过：{type(e).__name__}: {e}", flush=True)
+            print(f"[web] emozione semantica saltata: {type(e).__name__}: {e}", flush=True)
 
     # ③ 声学（emotion2vec+）：只在它**很有把握**时才盖过上面的判断。
     #
@@ -1337,13 +1337,13 @@ def fill_tags(payload: dict, text: str, audio_path: str = "",
                 payload["emotion"] = emo
                 payload["emotion_from"] = "acoustic"
             if BARGE_DEBUG:
-                why = "采纳" if take else ("把握不够" if score < ACOUSTIC_MIN_SCORE
-                                          else f"{emo} 不在信任名单")
-                print(f"[emotion] 声学 {(time.monotonic()-t0)*1000:.0f}ms "
-                      f"-> {emo or '-'} {score:.2f}（{why}）"
-                      f"  最终={payload.get('emotion') or '-'}", flush=True)
+                why = "accepted" if take else ("score too low" if score < ACOUSTIC_MIN_SCORE
+                                                else f"{emo} not trusted")
+                print(f"[emotion] acoustic {(time.monotonic()-t0)*1000:.0f}ms "
+                      f"-> {emo or '-'} {score:.2f} ({why}) "
+                      f"final={payload.get('emotion') or '-'}", flush=True)
         except Exception as e:
-            print(f"[web] 声学情绪跳过：{type(e).__name__}: {e}", flush=True)
+            print(f"[web] emozione acustica saltata: {type(e).__name__}: {e}", flush=True)
 
     # 实体：这里**不猜**。
     #
@@ -1483,7 +1483,7 @@ async def voicemem_llm_tts(pending, send, send_audio, owner, timeline,
                 raise
             except Exception as e:                # 多半是听到一半关了页面，不是错误
                 timeline.finish_segment(segment_id, complete=False)
-                print(f"[web] 语音发送中断：{type(e).__name__}", flush=True)
+                print(f"[web] invio audio interrotto: {type(e).__name__}", flush=True)
                 break
             else:
                 timeline.finish_segment(
@@ -1581,7 +1581,7 @@ async def voicemem_llm_tts(pending, send, send_audio, owner, timeline,
     # 记录本轮上下文；记忆写入放到后台，避免阻塞下一轮收音。
     context_reply = timeline.heard_text() if interrupted else reply
     if interrupted and BARGE_DEBUG:
-        print(f"[context] 打断于 {timeline.rendered_ms()}ms，保留回复 "
+        print(f"[context] interrotto a {timeline.rendered_ms()}ms, risposta conservata "
               f"{context_reply!r}", flush=True)
     history_turn_id = _push_history(
         context_session, context_space, pending.text, context_reply,
@@ -1620,7 +1620,7 @@ async def start_realtime_turn(pending, conn, send, timeline,
     # 记忆走 response.create 的 per-response instructions，不是 session.update。
     # 后者是会话级设置，实测更新完模型这一轮根本读不到（问"我的猫叫什么"，库里
     # 明明检索到了"叫墨墨"，模型还答"你刚提过但我没听清"）。
-    print(f"[lat] 本地判完说完 → 发 response.create", flush=True)
+    print("[lat] fine turno locale → invio response.create", flush=True)
     await conn.response.create(response={
         "instructions": _realtime_instructions(pending.memory_context, pending.stranger,
                                                replay=bool(pending.replay),
@@ -2243,7 +2243,7 @@ async def llm_tts_session(sock):
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            print(f"[web] 回复收尾失败：{type(e).__name__}: {e}", flush=True)
+            print(f"[web] chiusura risposta fallita: {type(e).__name__}: {e}", flush=True)
 
     async for pending in _session_anticipate(
             context_session, sock, on_speech=stop_reply, owner=owner,
@@ -2259,7 +2259,7 @@ async def llm_tts_session(sock):
         # 助手没在说话时的"嗯"照旧当正常一轮走。
         if _is_backchannel(pending.text) and hearing():
             if BARGE_DEBUG:
-                print(f"[barge] 整轮都是附和 {pending.text!r}，不算一轮，继续说", flush=True)
+                print(f"[barge] solo backchannel {pending.text!r}; non è un turno", flush=True)
             continue
         # 上一轮还没播完就被新的一轮顶掉。force：这里不能被宽限期挡下来，挡下来
         # 旧任务会继续往同一条 socket 里灌音频，两轮交织着播。
@@ -3190,13 +3190,13 @@ app = utils.build_app(MODE, realtime_session if MODE == "realtime" else llm_tts_
 
 
 if __name__ == "__main__":
-    print(f"[web] mode={MODE} spec≥{SPEC_MIN_CHARS}字 gamble={ARGS.gamble_ms}ms "
+    print(f"[web] mode={MODE} spec≥{SPEC_MIN_CHARS} chars gamble={ARGS.gamble_ms}ms "
           f"confirm={ARGS.confirm_ms}ms -> http://localhost:{ARGS.port}/", flush=True)
     # 全部预热在这儿做完，别让第一句话去等模型加载。ASR(FunASR paraformer)
     # 是懒加载的，等用户开口才拉起来要好几秒——那几秒的音频堆在 socket 缓冲里，
     # 追赶时逐帧喂 VAD，静音会瞬间累计过 confirm_ms，第一句直接被截断（听感就是
     # "第一句又慢又不准"）。
-    print("[web] 预热本地模型（embedding / ASR / VAD / 感知）…", flush=True)
+    print("[web] warmup modelli locali (embedding / ASR / VAD / percezione)…", flush=True)
     vm.warmup(verbose=True)
-    print("[web] 就绪", flush=True)
+    print("[web] pronto", flush=True)
     uvicorn.run(app, host=ARGS.host, port=ARGS.port)

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import logging
 import os
 import threading
 import traceback
@@ -79,6 +80,9 @@ class CosyVoice3TTS:
                         for path in (cosy_root, matcha_root):
                             if path.is_dir() and str(path) not in sys.path:
                                 sys.path.insert(0, str(path))
+                        logging.getLogger("modelscope").setLevel(logging.ERROR)
+                        logging.getLogger("funasr").setLevel(logging.WARNING)
+                        logging.getLogger("lightning").setLevel(logging.WARNING)
                         from cosyvoice.cli.cosyvoice import AutoModel
                     except ImportError as exc:
                         raise RuntimeError(
@@ -112,6 +116,11 @@ class CosyVoice3TTS:
                 future.result(timeout=0.5)
             except (asyncio.TimeoutError, RuntimeError, concurrent.futures.CancelledError):
                 future.cancel()
+            finally:
+                # Se l'event loop si chiude mentre il worker sta terminando,
+                # evitare coroutine Queue.put lasciate non awaitate.
+                if not future.done():
+                    future.cancel()
 
         def worker():
             try:
