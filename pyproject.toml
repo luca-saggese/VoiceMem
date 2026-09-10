@@ -26,7 +26,7 @@ classifiers = [
 # ModuleNotFoundError: funasr —— si chiama slm, nessuno si aspetterebbe che l'ASR sia lì dentro.
 dependencies = [
     "numpy",
-    "openai",
+    "openai[realtime]",
     "mem0ai",
     # ── audio chain ──
     "torch",
