@@ -73,6 +73,8 @@ class CosyVoice3TTS:
             with self._load_lock:
                 if self._model is None:
                     try:
+                        os.environ.setdefault("MODELSCOPE_CACHE", str(Path.home() / ".cache" / "modelscope"))
+                        os.environ.setdefault("MODELSCOPE_SDK_DEBUG", "0")
                         import sys
                         repo_root = Path(__file__).resolve().parents[1]
                         cosy_root = repo_root / "third_party" / "CosyVoice"
@@ -95,6 +97,10 @@ class CosyVoice3TTS:
                         fp16=self.fp16,
                     )
         return self._model
+
+    def warmup(self) -> None:
+        """Carica il modello prima della prima risposta web."""
+        self._load()
 
     async def stream(self, text: str, instruction: str | None = None):
         if not self.ref_audio:

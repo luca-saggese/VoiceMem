@@ -1405,6 +1405,8 @@ async def voicemem_llm_tts(pending, send, send_audio, owner, timeline,
     # 走注入的那个 TTS（第九个可替换位）。--config 里换 provider、或库用户
     # VoiceMem(tts=lambda: MyTTS()) 传自己的实现，都在这儿生效；没配就是内置默认。
     tts = memory_vm.utils.get("tts")
+    print(f"[tts] provider={type(tts).__name__} model={getattr(tts, 'model_path', '-')}",
+          flush=True)
     # 这一轮怎么念。情绪是逐轮变的，所以按轮传，不写在实例上。
     speak_as = _speak_instruction(pending.emotion)
 
@@ -1454,6 +1456,11 @@ async def voicemem_llm_tts(pending, send, send_audio, owner, timeline,
 
             synths.append(asyncio.create_task(run()))
             await streams.put((seg, text_start, text_end, chunks, state))
+            # CosyVoice è un modello locale seriale: il lock interno evita
+            # accessi concorrenti, ma pre-lanciare più task produce una coda
+            # invisibile e ritarda il primo audio del turno successivo.
+            if getattr(tts, "max_concurrency", 0) == 1:
+                await synths[-1]
         await streams.put(None)
 
     async def speak():
@@ -2012,7 +2019,7 @@ async def anticipate(sock, on_frame=None, on_speech=None, owner=None, is_busy=No
                 candidate = False
                 discard_candidate_turn = True
                 if BARGE_DEBUG:
-                    print("[barge] 疑似声音没有形成文字 → 恢复播放", flush=True)
+                    print("[barge] audio sospetto senza testo → riproduzione ripristinata", flush=True)
                 if on_candidate_reject:
                     await on_candidate_reject()
         # 助手正在说话时，ASR 里多半混着它自己的回声，那些字不能显示——用户会看见
@@ -2033,7 +2040,7 @@ async def anticipate(sock, on_frame=None, on_speech=None, owner=None, is_busy=No
                 last_partial = ""
                 barge_base = 0
                 if BARGE_DEBUG:
-                    print(f"[barge] 丢弃未确认的声音回合：{st.turn.text!r}", flush=True)
+                        print(f"[barge] turno audio non confermato scartato: {st.turn.text!r}", flush=True)
                 continue
 
             if candidate and not barged:
@@ -3196,7 +3203,16 @@ if __name__ == "__main__":
     # 是懒加载的，等用户开口才拉起来要好几秒——那几秒的音频堆在 socket 缓冲里，
     # 追赶时逐帧喂 VAD，静音会瞬间累计过 confirm_ms，第一句直接被截断（听感就是
     # "第一句又慢又不准"）。
-    print("[web] warmup modelli locali (embedding / ASR / VAD / percezione)…", flush=True)
+    print("[web] warmup modelli locali (embedding / ASR / VAD / percezione / TTS)…", flush=True)
     vm.warmup(verbose=True)
+    try:
+        tts = vm.utils.get("tts")
+        warmup = getattr(tts, "warmup", None)
+        if callable(warmup):
+            print(f"[web] warmup TTS {type(tts).__name__}…", flush=True)
+            warmup()
+            print("[web] TTS pronto", flush=True)
+    except Exception as exc:
+        print(f"[web] warmup TTS saltato: {type(exc).__name__}: {exc}", flush=True)
     print("[web] pronto", flush=True)
     uvicorn.run(app, host=ARGS.host, port=ARGS.port)
