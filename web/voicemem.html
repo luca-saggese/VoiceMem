@@ -250,8 +250,8 @@ button{cursor:pointer;background:none;border:none}
   background:var(--bg-input);color:var(--txt);font-size:13px}
 .newspace input::placeholder{color:var(--txt-3)}
 .newspace input:focus{outline:none;border-color:var(--blue)}
-/* 语言下拉：不套样式的话用的是浏览器原生外观——深色主题下白底 + 继承来的白字，
-   等于看不见。跟旁边输入框一套配色，appearance:none 去掉原生控件的底色。 */
+/* Il selettore lingua usa l'aspetto nativo del browser; nel tema scuro il
+  contrasto può essere insufficiente. Questo stile uniforma il controllo agli input. */
 .newspace select{padding:8px 28px 8px 11px;border-radius:9px;border:1px solid var(--line);
   background:var(--bg-input);color:var(--txt);font-size:13px;cursor:pointer;
   appearance:none;-webkit-appearance:none;
@@ -260,7 +260,7 @@ button{cursor:pointer;background:none;border:none}
   background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;
   background-size:5px 5px,5px 5px;background-repeat:no-repeat}
 .newspace select:focus{outline:none;border-color:var(--blue)}
-/* 展开的选项列表由系统绘制，只有显式给色才不会跟着系统主题走偏。 */
+/* Il menu aperto è disegnato dal sistema; colori espliciti mantengono il tema coerente. */
 .newspace select option{background:var(--bg-input);color:var(--txt)}
 .modal-foot{display:flex;justify-content:flex-end;gap:9px}
 #toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);padding:9px 16px;
@@ -281,65 +281,65 @@ button{cursor:pointer;background:none;border:none}
 <body>
 <div id="app">
 
-  <!-- ① 侧栏：Memory Space + 该空间下的对话 -->
+  <!-- ① Barra laterale: Memory Space e conversazioni dello spazio -->
   <aside class="sidebar">
     <div class="side-head">
-      <button class="ico" id="btnCollapse" title="收起侧栏" aria-label="收起侧栏">
+      <button class="ico" id="btnCollapse" title="Comprimi barra laterale" aria-label="Comprimi barra laterale">
         <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9.5 4v16"/></svg>
       </button>
       <span class="grow"></span>
-      <button class="ico" id="btnSearch" title="搜索对话 (⌘K)" aria-label="搜索对话">
+      <button class="ico" id="btnSearch" title="Cerca conversazioni (⌘K)" aria-label="Cerca conversazioni">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
       </button>
-      <button class="ico" id="btnNew" title="新对话" aria-label="新对话">
+      <button class="ico" id="btnNew" title="Nuova conversazione" aria-label="Nuova conversazione">
         <svg viewBox="0 0 24 24"><path d="M4 20h4l10-10a2.5 2.5 0 0 0-3.5-3.5L4.5 16.5V20z"/><path d="M13.5 7.5 16.5 10.5"/></svg>
       </button>
     </div>
-    <div class="side-search" id="sideSearch"><input id="searchIn" placeholder="搜索对话" spellcheck="false" /></div>
+    <div class="side-search" id="sideSearch"><input id="searchIn" placeholder="Cerca conversazioni" spellcheck="false" /></div>
     <div class="side-scroll">
-      <div class="side-label">对话<span class="c" id="sessCount"></span></div>
+      <div class="side-label">Conversazioni<span class="c" id="sessCount"></span></div>
       <ul class="sess" id="sessList"></ul>
     </div>
     <div class="side-foot">VOICEMEM</div>
   </aside>
 
-  <!-- ② 实时对话 -->
+  <!-- ② Conversazione in tempo reale -->
   <section class="center">
     <canvas id="orb" width="264" height="264" aria-hidden="true"></canvas>
 
     <div class="panel p-in">
-      <div class="panel-h" data-i18n="liveInput">流式输入 · Live input</div>
+      <div class="panel-h" data-i18n="liveInput">Input streaming · Live input</div>
       <div class="spk" id="spk">
-        <span class="av" id="spkAv">你</span>
-        <span class="nm" id="spkNm">你</span>
-        <span class="id" id="spkId" data-i18n="voiceMatched">speaker 0 · 声纹已匹配</span>
+        <span class="av" id="spkAv">Tu</span>
+        <span class="nm" id="spkNm">Tu</span>
+        <span class="id" id="spkId" data-i18n="voiceMatched">speaker 0 · voce riconosciuta</span>
         <span class="lv" id="spkLv"><i></i><i></i><i></i><i></i><i></i></span>
       </div>
-      <div class="live-text idle" id="liveInput" data-i18n="waitingYou">等待你说话…</div>
-      <input id="textIn" class="textin" placeholder="或直接打字回车" />
+      <div class="live-text idle" id="liveInput" data-i18n="waitingYou">In attesa della tua voce…</div>
+      <input id="textIn" class="textin" placeholder="Oppure scrivi e premi Invio" />
       <div class="tags" id="tags"></div>
     </div>
 
     <div class="panel p-recall">
-      <div class="panel-h">Top-K 召回</div>
+      <div class="panel-h">Recupero Top-K</div>
       <div class="recall-cols">
-        <div class="rc l"><div class="rc-h">左脑 · 事实</div><ul id="recallL"></ul></div>
-        <div class="rc r"><div class="rc-h">右脑 · 画像</div><ul id="recallR"></ul></div>
+        <div class="rc l"><div class="rc-h">Sinistro · fatti</div><ul id="recallL"></ul></div>
+        <div class="rc r"><div class="rc-h">Destro · profilo</div><ul id="recallR"></ul></div>
       </div>
     </div>
 
     <div class="panel p-out">
-      <div class="panel-h">AI 回复</div>
-      <div class="reply idle" id="reply">这一轮还没有回复。</div>
+      <div class="panel-h">Risposta AI</div>
+      <div class="reply idle" id="reply">Nessuna risposta ancora.</div>
       <div class="out-foot">
         <div class="voice" id="voice">
           <div class="ear"><span class="ring"></span></div>
           <canvas id="wave"></canvas>
-          <span class="lab" id="voiceLab">待机</span>
+          <span class="lab" id="voiceLab">Inattivo</span>
         </div>
         <div class="btns">
-          <button class="btn" id="pauseBtn" disabled>暂停</button>
-          <button class="btn primary" id="talkBtn">开始对话</button>
+          <button class="btn" id="pauseBtn" disabled>Pausa</button>
+          <button class="btn primary" id="talkBtn">Inizia a parlare</button>
         </div>
       </div>
     </div>
@@ -355,25 +355,25 @@ button{cursor:pointer;background:none;border:none}
       </div>
       <div class="export">
         <span class="pill space" id="spaceBadge" data-i18n-title="spaceBadgeTitle"
-              title="当前 Memory Space —— 换一个，脑图和记忆都跟着换">
+              title="Memory Space corrente — cambiala per cambiare anche il grafo">
           <svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
           <span id="spaceBadgeName">Demo</span>
         </span>
         <select class="sel" id="spaceSel" data-i18n-title="spaceSelTitle"
-                title="切换 Memory Space"></select>
+                title="Cambia Memory Space"></select>
         <button class="btn sm" id="newSpaceBtn" data-i18n-title="spaceNewTitle"
-                title="新建一个 Memory Space">+</button>
-        <select class="sel" id="langSel" title="Language / 界面与助手语言">
+                title="Crea una nuova Memory Space">+</button>
+        <select class="sel" id="langSel" title="Lingua dell'interfaccia e dell'assistente">
           <option value="it">Italiano</option>
           <option value="en">EN</option>
         </select>
-        <select class="sel" id="dlScope" title="选择导出范围">
-          <option value="all" data-i18n="dlAll">本空间全部记忆</option>
-          <option value="left" data-i18n="dlLeft">左脑 · 事实</option>
-          <option value="right" data-i18n="dlRight">右脑 · 画像</option>
-          <option value="chat" data-i18n="dlChat">当前对话</option>
+        <select class="sel" id="dlScope" title="Seleziona l'ambito di esportazione">
+          <option value="all" data-i18n="dlAll">Tutte le memorie dello spazio</option>
+          <option value="left" data-i18n="dlLeft">Sinistro · fatti</option>
+          <option value="right" data-i18n="dlRight">Destro · profilo</option>
+          <option value="chat" data-i18n="dlChat">Conversazione corrente</option>
         </select>
-        <button class="btn sm" id="dlBtn" data-i18n="download">下载</button>
+        <button class="btn sm" id="dlBtn" data-i18n="download">Scarica</button>
       </div>
     </div>
 
@@ -381,7 +381,7 @@ button{cursor:pointer;background:none;border:none}
       <div class="track" id="track">
         <div class="pane">
           <div class="chat-head">
-            <span class="ttl" id="chatTitle">新对话</span>
+            <span class="ttl" id="chatTitle">Nuova conversazione</span>
           </div>
           <div class="chat" id="chatLog"></div>
         </div>
@@ -390,8 +390,8 @@ button{cursor:pointer;background:none;border:none}
             <img id="brain" alt="" src="./images/background.webp" />
             <canvas id="fx"></canvas>
             <div class="legend">
-              <span><i style="background:#6ba7f0"></i>左脑 · 事实</span>
-              <span><i style="background:#ef7bab"></i>右脑 · 画像</span>
+              <span><i style="background:#6ba7f0"></i>Sinistro · fatti</span>
+              <span><i style="background:#ef7bab"></i>Destro · profilo</span>
             </div>
             <div id="card" aria-hidden="true">
               <div class="eb"><span class="sw" id="c-sw"></span><span class="kd" id="c-kd">entity</span><span class="id" id="c-id">#0000</span></div>
@@ -405,31 +405,31 @@ button{cursor:pointer;background:none;border:none}
   </section>
 </div>
 
-<!-- 新对话：必须先选 Memory Space -->
+<!-- Nuova conversazione: scegli prima una Memory Space -->
 <div class="mask" id="mask">
   <div class="modal">
-    <h3 data-i18n="newChat">新对话</h3>
-    <p data-i18n="pickSpaceHint">先选一个 Memory Space。对话创建后所属空间不可更改。</p>
+    <h3 data-i18n="newChat">Nuova conversazione</h3>
+    <p data-i18n="pickSpaceHint">Scegli prima una Memory Space. La conversazione non potrà essere spostata.</p>
     <div class="pick" id="pick"></div>
     <div class="newspace" id="newSpaceRow">
-      <input id="newSpaceName" data-i18n-ph="spaceNamePh" placeholder="新空间的名字" maxlength="20" spellcheck="false" />
-      <button class="btn sm" id="newSpaceAdd" data-i18n="spaceCreate">创建空间</button>
+      <input id="newSpaceName" data-i18n-ph="spaceNamePh" placeholder="Nome della nuova space" maxlength="20" spellcheck="false" />
+      <button class="btn sm" id="newSpaceAdd" data-i18n="spaceCreate">Crea space</button>
     </div>
     <div class="modal-foot">
-      <button class="btn" id="mCancel" data-i18n="cancel">取消</button>
-      <button class="btn primary" id="mCreate" data-i18n="chatCreate">创建对话</button>
+      <button class="btn" id="mCancel" data-i18n="cancel">Annulla</button>
+      <button class="btn primary" id="mCreate" data-i18n="chatCreate">Crea conversazione</button>
     </div>
   </div>
 </div>
-<!-- 新建 Memory Space。独立一个弹窗，不跟「新对话」那个抢 #mask -->
+<!-- Nuova Memory Space, in una finestra separata dalla nuova conversazione -->
 <div class="mask" id="spaceMask">
   <div class="modal">
-    <h3 data-i18n="spaceNewTitle">新建 Memory Space</h3>
-    <p data-i18n="spaceNewHint">起个名字。磁盘上会出现同名文件夹，记忆从零开始长。</p>
+    <h3 data-i18n="spaceNewTitle">Nuova Memory Space</h3>
+    <p data-i18n="spaceNewHint">Dalle un nome. Verrà creata una cartella vuota.</p>
     <div class="newspace">
-      <input id="spaceNewName" data-i18n-ph="spaceNamePh" placeholder="新空间的名字"
+      <input id="spaceNewName" data-i18n-ph="spaceNamePh" placeholder="Nome della nuova space"
              maxlength="20" spellcheck="false" />
-      <!-- 语言在**建的时候**定一次，之后不能改：记忆和回复都跟着它。一个库里
+      <!-- La lingua viene fissata alla creazione e guida memorie e risposte. Non mescolare lingue nella stessa space.
            Mescolare lingue nella stessa memoria riduce il recupero semantico. -->
       <select id="spaceNewLang">
         <option value="en">English</option>
@@ -437,18 +437,16 @@ button{cursor:pointer;background:none;border:none}
       </select>
     </div>
     <div class="modal-foot">
-      <button class="btn" id="spaceNewCancel" data-i18n="cancel">取消</button>
-      <button class="btn primary" id="spaceNewOk" data-i18n="spaceCreate">创建空间</button>
+      <button class="btn" id="spaceNewCancel" data-i18n="cancel">Annulla</button>
+      <button class="btn primary" id="spaceNewOk" data-i18n="spaceCreate">Crea space</button>
     </div>
   </div>
 </div>
 <div id="toast"></div>
 
 <script>
-/* 脚本一抛错，后面所有 addEventListener 就都挂不上——表现是"按钮点了没反应"，
-   而页面看起来完全正常。这种事已经发生过两次（一次是 $('spaceList') 取不到，
-   一次是变量遮蔽），每次都得让人去开 F12 才看得见。
-   干脆把错误直接贴在页面顶上。 */
+/* Se lo script fallisce, gli event listener successivi non vengono registrati:
+  mostriamo gli errori direttamente nella pagina per facilitare il debug. */
 (function(){
   function show(msg){
     var d=document.getElementById('__err');
@@ -462,20 +460,20 @@ button{cursor:pointer;background:none;border:none}
     d.textContent += msg + '\n';
   }
   window.addEventListener('error', function(e){
-    show('[JS 出错] ' + (e.message||'') + '\n  ' + (e.filename||'') + ':' + (e.lineno||'') +
+    show('[Errore JS] ' + (e.message||'') + '\n  ' + (e.filename||'') + ':' + (e.lineno||'') +
          (e.error && e.error.stack ? '\n' + e.error.stack.split('\n').slice(0,4).join('\n') : ''));
   });
   window.addEventListener('unhandledrejection', function(e){
-    show('[Promise 没接住] ' + (e.reason && (e.reason.stack||e.reason.message) || e.reason));
+    show('[Promise non gestita] ' + (e.reason && (e.reason.stack||e.reason.message) || e.reason));
   });
 })();
 /* ══════════════════════════════════════════════════════════════════════
-   0. 语言 —— 界面文案和助手说话的语言一起切
+  0. Lingua: testi dell'interfaccia e lingua dell'assistente cambiano insieme
 
-   文案集中在这张表里，代码里一律用 i18n('key')。静态 HTML 上标 data-i18n（正文）
-   / data-i18n-ph（placeholder）/ data-i18n-title（title），切换时统一重刷。
+  I testi sono raccolti nella tabella I18N e usano i18n('key'). Gli attributi
+  data-i18n, data-i18n-ph e data-i18n-title vengono aggiornati al cambio lingua.
 
-   带位置的用 {0} {1} 占位——中英语序不同，硬拼字符串会在某一种语言下读不通。
+  I placeholder {0} e {1} permettono di gestire correttamente l'ordine delle parole.
    ══════════════════════════════════════════════════════════════════════ */
 const I18N = {
   it: {
@@ -556,7 +554,7 @@ function i18n(key, ...args){
   const s = (I18N[LANG] && I18N[LANG][key]) || (I18N.it[key]) || key;
   return args.length ? s.replace(/\{(\d+)\}/g, (m,i)=> args[i] !== undefined ? args[i] : m) : s;
 }
-/* 静态 HTML 上标了 data-i18n* 的，切语言时统一重刷 */
+/* Aggiorna gli attributi data-i18n* del markup statico. */
 function applyLang(){
   document.documentElement.lang = LANG === 'en' ? 'en' : 'it';
   for(const el of document.querySelectorAll('[data-i18n]'))
@@ -567,11 +565,10 @@ function applyLang(){
     el.title = i18n(el.dataset.i18nTitle);
 }
 /* ══════════════════════════════════════════════════════════════════════
-   A. 脑图 —— 节点全部长在两个半球轮廓里面
-   背景图 1672×941，脑轮廓实测：左半球 x 0.254–0.481，右半球 x 0.519–0.746，
-   y 0.120–0.843。每个半球取一个内接椭圆，簇心落在椭圆内的环上，成员按
-   向日葵角在簇心周围铺开，越界的点收回 0.95 半径内 —— 不会有点跑到脑外。
-   ══════════════════════════════════════════════════════════════════════ */
+  A. Brain graph: nodes stay inside the two hemisphere outlines.
+  Background image: 1672×941. Each hemisphere uses an inscribed ellipse;
+  cluster members are distributed around its center and kept inside the outline.
+  ══════════════════════════════════════════════════════════════════════ */
 window.VMBrain = (function(){
 const IMG_AR = 1672/941;
 const BOX  = { x0:0.245, x1:0.755, y0:0.11, y1:0.855 };
@@ -579,7 +576,7 @@ const HEMI = { L:{cx:0.378, cy:0.485, rx:0.090, ry:0.295},
                R:{cx:0.622, cy:0.485, rx:0.090, ry:0.295} };
 const LEFT_SLOTS  = ['work','health','relationships','finance','goals','daily_life','knowledge'];
 const RIGHT_SLOTS = ['emotion','personality','preference'];
-/* 脑图上每个分区的标签。跟着界面语言走——这是图上最显眼的字。 */
+/* Labels for each graph partition, following the selected interface language. */
 const SLOT_DESC_I18N = {
   it: {
     work:'Lavoro · carriera / progetti / colleghi / riunioni',
@@ -630,11 +627,9 @@ const cKd=document.getElementById('c-kd'), cId=document.getElementById('c-id'),
 let N=[], L=[], NB=[], BEAM=[], USER=0;
 const t0=performance.now();
 let W=0,H=0,DPR=1,IW=0,IH=0,OX=0,OY=0,S=1;
-//: 射线从左脑打到右脑的动画。dur 是走完全程的秒数——原来 2.1 秒，慢得像在爬，
-//: 而这条射线要表达的是"检索一下就找到了"。
+//: Animation of a beam travelling from the left to the right graph area.
 const PULSE={t:-0.6,dur:.9,trail:.3,seg:26};
-//: 命中的节点：先"啵"地胀大再落回原样，然后亮着待一会儿。
-//: pop 是胀大那一下的时长，hold 是之后保持高亮多久（射线到达后还看得见）。
+//: Hit nodes briefly grow, return to normal, and remain highlighted for a moment.
 const HIT={pop:.42, hold:1.0, fade:.45};
 function nowT(){ return (performance.now()-t0)/1000; }
 
@@ -670,7 +665,7 @@ function add(side, kind, label, cluster, detail){
   return id;
 }
 
-/* ---- 布局 ---- */
+/* ---- Layout ---- */
 function hemi(side){
   const h=HEMI[side]||HEMI.L;
   return { cx:OX+h.cx*IW, cy:OY+h.cy*IH, rx:h.rx*IW, ry:h.ry*IH };
@@ -712,7 +707,7 @@ function layout(){
   }
 }
 
-/* ---- 尺寸：脑轮廓按高度定尺寸；容器变宽只是重新居中（平移） ---- */
+/* ---- Size: preserve the brain outline aspect ratio and center it. ---- */
 function resize(){
   const r=wrap.getBoundingClientRect();
   if(!r.width||!r.height) return;
@@ -735,7 +730,7 @@ new ResizeObserver(resize).observe(wrap);
 brain.addEventListener('load',()=>{ resize(); brain.classList.add('in'); });
 if(brain.complete&&brain.naturalWidth) brain.classList.add('in');
 
-/* ---- 光晕 ---- */
+/* ---- Glow ---- */
 const GLOW={};
 function hexa(h,a){ const n=parseInt(h.slice(1),16);
   return 'rgba('+(n>>16)+','+(n>>8&255)+','+(n&255)+','+a+')'; }
@@ -751,7 +746,7 @@ function buildGlow(){
   }
 }
 
-/* ---- 指针 ---- */
+/* ---- Pointer ---- */
 let mx=-9999,my=-9999,has=false,sel=-1,selPrev=-1;
 let cX=0,cY=0,cTX=0,cTY=0,cSide=1,cOn=false;
 function pt(e){ const r=cv.getBoundingClientRect(); mx=e.clientX-r.left; my=e.clientY-r.top; has=true; }
@@ -759,7 +754,7 @@ wrap.addEventListener('pointermove',pt,{passive:true});
 wrap.addEventListener('pointerdown',pt,{passive:true});
 wrap.addEventListener('pointerleave',()=>{has=false;mx=my=-9999;},{passive:true});
 
-/* ---- 主循环 ---- */
+/* ---- Main loop ---- */
 let tPrev=performance.now();
 function frame(now){
   const t=(now-t0)/1000, dt=Math.min(.05,(now-tPrev)/1000); tPrev=now;
@@ -822,7 +817,7 @@ function frame(now){
           if(u1<=0||u0>=1) continue;
           const q0=at(Math.max(0,u0)), q1=at(Math.min(1,u1));
           const k=1-i/PULSE.seg, e=k*k*(3-2*k);
-          // 金色。里芯偏白让它有亮度，外晕是暖金，在深色背景上比蓝白更跳。
+          // Warm gold beam with a pale core for contrast on the dark background.
           ctx.strokeStyle=pass?'rgba(255,240,190,'+(.62*e).toFixed(3)+')'
                               :'rgba(255,196,74,'+(.13*e).toFixed(3)+')';
           ctx.lineWidth=(pass?1.3*e+.4:4.2*e+1)*Math.max(.8,S*.8);
@@ -868,31 +863,30 @@ function frame(now){
     ctx.fillStyle='rgba(255,255,255,'+(n.iv*.95).toFixed(3)+')';
     ctx.fillText(w,n.x,cy+FS*.06);
   }
-  // 命中的节点：白光一闪、胀大一下再落回原样，亮着待一秒，然后淡出。
+  // Hit nodes flash white, grow briefly, hold, and then fade out.
   //
-  // 原来是一直在那儿慢慢呼吸的蓝圈——检索命中和平时没什么区别，看不出"就是这条"。
-  // 现在分三段：pop 那一下抓住眼睛，hold 让人看清是哪个节点，fade 收干净。
+  // The three phases make the retrieved node clear: pop, hold, and fade.
   ctx.globalCompositeOperation='lighter';
   for(const n of N){
     if(!n.hit) continue;
     const age=t-(n.hitT||0);
     let amp, scale;
-    if(age<HIT.pop){                       // 胀大再落回：先冲到 1，回落用 ease-out
+    if(age<HIT.pop){                       // Grow and return with ease-out.
       const k=age/HIT.pop;
       amp=1; scale=1+.55*Math.sin(Math.PI*k)*(1-k*.35);
-    }else if(age<HIT.pop+HIT.hold){        // 保持：稳稳亮着，微微呼吸
+    }else if(age<HIT.pop+HIT.hold){        // Hold with a subtle pulse.
       amp=1; scale=1+.06*Math.sin(t*2.4+n.ph);
-    }else{                                 // 淡出
+    }else{                                 // Fade out.
       const k=(age-HIT.pop-HIT.hold)/HIT.fade;
       if(k>=1){ n.hit=0; continue; }
       amp=1-k; scale=1+.04*(1-k);
     }
     const a=n.hit*amp;
     const base2=(n.r*S+4.2*Math.max(.7,S*.8))*scale;
-    ctx.beginPath(); ctx.arc(n.x,n.y,base2+4,0,6.2832);   // 外圈柔光
+    ctx.beginPath(); ctx.arc(n.x,n.y,base2+4,0,6.2832);   // Soft outer ring.
     ctx.strokeStyle='rgba(255,255,255,'+(.20*a).toFixed(3)+')';
     ctx.lineWidth=Math.max(4,6.0*S*.8); ctx.stroke();
-    ctx.beginPath(); ctx.arc(n.x,n.y,base2,0,6.2832);     // 内圈实白
+    ctx.beginPath(); ctx.arc(n.x,n.y,base2,0,6.2832);     // Solid white inner ring.
     ctx.strokeStyle='rgba(255,255,255,'+(.92*a).toFixed(3)+')';
     ctx.lineWidth=Math.max(1.4,1.9*S*.8); ctx.stroke();
   }
@@ -1003,7 +997,7 @@ return {
   reset(){ base(); layout(); },
   add:add, link:link, clusterNode:labelOf, resize:resize,
   highlight(ids){
-    // 记下命中时刻：胀大/保持/淡出三段都按各自的 hitT 算，不同批次不会互相打断。
+    // Store the hit time; separate batches do not interrupt one another.
     const now=nowT();
     for(const n of N) n.hit=0;
     for(const i of ids) if(N[i]){ N[i].hit=1; N[i].hitT=now; }
@@ -1011,7 +1005,7 @@ return {
   beam(from,to){ BEAM=[]; for(const a of from) for(const b of to) if(N[a]&&N[b]) BEAM.push({a:a,b:b});
                  if(BEAM.length) PULSE.t=-PULSE.trail; },
   clear(){ for(const n of N){ n.hit=0; n.act=0; } BEAM=[]; },
-  // 调试用：把节点坐标倒出来（控制台 VMBrain.__dump()）
+  // Debug helper: expose node coordinates in the VMBrain.__dump() console call.
   __dump(){ return N.map(n=>({id:n.id,side:n.side,kind:n.kind,cluster:n.cluster,
                               w:n.w,x:n.x,y:n.y,sx:n.sx,sy:n.sy})); }
 };
@@ -1020,7 +1014,7 @@ return {
 
 <script>
 /* ══════════════════════════════════════════════════════════════════════
-   B. 数据 · 界面 · 模拟
+  B. Data, interface, and simulation
    ══════════════════════════════════════════════════════════════════════ */
 (function(){
 const $ = id => document.getElementById(id);
@@ -1030,15 +1024,13 @@ function toast(m){ const el=$('toast'); el.textContent=m; el.classList.add('on')
   clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('on'),2200); }
 function trunc(s){ s=String(s||''); return s.length>40?s.slice(0,40)+'…':s; }
 
-/* ── 两个 Memory Space，各自带一整套预置记忆、对话和模拟脚本 ─────── */
-/* Memory Space 的前端镜像。内容全部来自后端（见 loadSpaces / loadMemories）——
-   这里以前塞着两套演示数据和一份"每 3 秒自动播一句"的脚本，页面一打开就自己
-   演起来，跟真实记忆混在同一张图上，分不清哪条是真记住的。 */
+/* ── Memory Space state loaded from the backend ─────────────────────── */
+/* The frontend mirrors loadSpaces / loadMemories; demo data is not injected here. */
 const SPACES = {};
 const SPACE_IDS=[];
 
-/* ── 会话 ─────────────────────────────────────────────────────────── */
-function blankUI(){ return { input:'', reply:'', speaker:'你',
+/* ── Sessions ─────────────────────────────────────────────────────── */
+function blankUI(){ return { input:'', reply:'', speaker:'Tu',
   tags:{emo:'',ent:'',sch:''}, recallL:[], recallR:[] }; }
 let sessions=[], currentId=0, nextId=1, activeSpace='demo', searchQ='';
 
@@ -1062,13 +1054,10 @@ function selectSession(id){
   else window.VMBrain.clear();
   renderAll();
 }
-/* ── Memory Space：真的建在磁盘上 ─────────────────────────────────────
+/* ── Memory Space: persisted on disk ─────────────────────────────────
+  Space listing, creation, and switching are all handled by the backend. */
 
-   这一块以前只在浏览器内存里造对象，磁盘上什么都不会发生，切换也没接后端
-   （switchSpace 甚至没有定义，点侧栏空间会直接抛错、把后面的监听全带断）。
-   现在三件事都走后端：列出磁盘上的空间、新建一个空的、切过去。            */
-
-/* 把后端列出的空间并进 SPACES。已有的（demo 这种带演示脚本的）只更新条数。 */
+/* Merge spaces returned by the backend into SPACES and update their counts. */
 async function loadSpaces(){
   try{
     const r=await fetch('/api/spaces'); if(!r.ok) return;
@@ -1084,14 +1073,10 @@ async function loadSpaces(){
     if(d.active && SPACES[d.active]) activeSpace=d.active;
     fillSpaceSel();
     renderSpaces();
-  }catch(e){ console.warn('[space] 列不出来', e); }
+  }catch(e){ console.warn('[space] Unable to list spaces', e); }
 }
 
-/* 右上角那个下拉：列出所有空间，选哪个就切哪个。
-
-   以前这里只有一个静态的徽章（#spaceBadge），页面上根本没有切换的入口——
-   代码里 switchSpace 倒是有人调用（侧栏的 #spaceList），可那个元素早就不在
-   HTML 里了，于是切换功能整个是死的。 */
+/* Top-right selector: list all spaces and switch to the selected one. */
 function fillSpaceSel(){
   const sel=$('spaceSel'); if(!sel) return;
   sel.innerHTML='';
@@ -1105,11 +1090,10 @@ function fillSpaceSel(){
 }
 if($('spaceSel')) $('spaceSel').addEventListener('change',e=>switchSpace(e.target.value));
 
-/* 右上角那个「+」：起个名字 → 磁盘上出现文件夹 → 直接切过去开始用。
-   独立的弹窗，不跟「新对话」抢 #mask（那个还得先选空间才能建对话）。 */
+/* Top-right plus button: name a space, create its folder, and switch to it. */
 function openSpaceNew(){
   const el=$('spaceNewName'); if(el){ el.value=''; }
-  const lg=$('spaceNewLang'); if(lg){ lg.value='en'; }   // 默认英文
+  const lg=$('spaceNewLang'); if(lg){ lg.value='en'; }   // English by default.
   $('spaceMask').classList.add('on');
   setTimeout(()=>el&&el.focus(),50);
 }
@@ -1121,10 +1105,10 @@ async function doCreateSpace(){
   const btn=$('spaceNewOk'); btn.disabled=true; btn.textContent=i18n('spaceCreating');
   const id=await createSpace(name, ($('spaceNewLang')||{}).value||'en');
   btn.disabled=false; btn.textContent=i18n('spaceCreate');
-  if(!id) return;                       // createSpace 里已经 toast 过原因了
+  if(!id) return;                       // createSpace already displayed the reason.
   closeSpaceNew();
   fillSpaceSel();
-  await switchSpace(id);                // 建完直接切过去，省一步
+  await switchSpace(id);                // Switch immediately after creation.
   toast(i18n('created', name));
 }
 if($('newSpaceBtn'))    $('newSpaceBtn').addEventListener('click', openSpaceNew);
@@ -1135,10 +1119,10 @@ if($('spaceNewName'))   $('spaceNewName').addEventListener('keydown',e=>{
   if(e.key==='Escape') closeSpaceNew();
 });
 if($('spaceMask')) $('spaceMask').addEventListener('click',e=>{
-  if(e.target===$('spaceMask')) closeSpaceNew();     // 点遮罩关掉
+  if(e.target===$('spaceMask')) closeSpaceNew();     // Close when clicking the overlay.
 });
 
-/* 新建一个空的 Memory Space —— 磁盘上出现这个名字的文件夹，记忆从零开始长 */
+/* Create an empty Memory Space and its corresponding folder on disk. */
 async function createSpace(name, language){
   const r=await fetch('/api/spaces',{method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -1156,7 +1140,7 @@ async function createSpace(name, language){
   return it.id;
 }
 
-/* 切到另一个空间：后端换实例（实测 ~2.3s，模型是进程内复用的），前端重铺脑图 */
+/* Switch backend instances and rebuild the graph for the selected space. */
 async function switchSpace(id){
   if(!id || id===activeSpace) return;
   toast(i18n('switching', SPACES[id]?SPACES[id].name:id));
@@ -1166,11 +1150,11 @@ async function switchSpace(id){
   }catch(e){ toast(i18n('switchFailed')); return; }
   activeSpace=id;
   fillSpaceSel(); renderSpaces(); renderSessions();
-  await loadMemories();                 // 重新拉这个空间的记忆铺脑图
+  await loadMemories();                 // Reload memories and rebuild the graph.
   toast(i18n('switched', SPACES[id]?SPACES[id].name:id));
 }
 
-/* ── 脑图：按空间铺记忆 ───────────────────────────────────────────── */
+/* ── Brain graph: render memories by space ────────────────────────── */
 const CLUSTER_KIND={emotion:'emotion',personality:'exper',preference:'prefer'};
 function buildGraph(sid){
   const sp=SPACES[sid];
@@ -1189,23 +1173,19 @@ function buildGraph(sid){
     for(let i=0;i<g.length;i++) for(let j=i+1;j<g.length;j++)
       window.VMBrain.link(g[i],g[j],'rel',.28); }
   sp.right.forEach(m=>{
-    // full 优先用实体描述（后端归纳出来的一句话），没有就退回标题本身——
-    // 演示数据没有 desc，两边照样走同一条路。
+    // Prefer the backend summary, falling back to the memory text.
     m.node=window.VMBrain.add('R',CLUSTER_KIND[m.cluster]||'exper',trunc(m.text),m.cluster,
       {full:m.desc||m.text, notes:m.notes||[], src:m.src||''});
   });
   window.VMBrain.clear();
 }
 
-/* ── 渲染 ─────────────────────────────────────────────────────────── */
+/* ── Rendering ─────────────────────────────────────────────────────── */
 function renderSpaces(){
-  // 侧栏的空间列表已经换成右上角那个徽章（#spaceBadgeName）。旧结构还在就照旧
-  // 渲染，不在就只更新徽章——JS 里硬取 $('spaceList') 会在这里抛错，脚本一断，
-  // 后面所有监听（含「开始对话」）都挂不上，表现就是按钮点了没反应。
+  // The space list moved to the top-right badge. Support the old list when present.
   const badge=$('spaceBadgeName');
   if(badge){
-    // 带上节点数：脑图空白时一眼看出是「没拉到记忆」还是「拉到了但没画出来」。
-    // 原来这个数字写在 #brainSpace 上，而那个元素在当前这版 HTML 里不存在。
+    // Include node counts so an empty graph is easy to diagnose.
     const sp=SPACES[activeSpace];
     badge.textContent=i18n('badgeStat', sp.name, sp.left.length, sp.right.length);
   }
@@ -1271,7 +1251,7 @@ function renderChat(){
     const w=document.createElement('div');
     w.className='turn '+(turn.role==='user'?'user':'ai');
     const who=document.createElement('div'); who.className='who';
-    who.textContent=turn.role==='user'?(turn.speaker||'你'):'VoiceMem';
+    who.textContent=turn.role==='user'?(turn.speaker||((LANG==='en')?'You':'Tu')):'VoiceMem';
     const said=document.createElement('div'); said.className='said'; said.textContent=turn.text;
     w.append(who,said); box.appendChild(w);
   }
@@ -1285,9 +1265,8 @@ function chip(kind,label,val){
   el.append(b,document.createTextNode(val||'—'));
   return el;
 }
-// 说话人配色。'你'/'You' 是 blankUI() 里写死的默认说话人；其余按声纹认出来的
-// 其余按声纹认出来的人名统一用一个兜底色，不再预置演示用的人名。
-const SPK_COLOR={'你':'#6ba7f0','You':'#6ba7f0'};
+// Speaker colors. The default speaker is defined by blankUI(); recognized names use a fallback color.
+const SPK_COLOR={'You':'#6ba7f0','Tu':'#6ba7f0'};
 function renderIO(s){
   const li=$('liveInput');
   if(s.ui.input){ li.classList.remove('idle'); li.textContent=s.ui.input; }
@@ -1298,11 +1277,11 @@ function renderIO(s){
   const box=$('tags'); box.innerHTML='';
   box.append(chip('emo','emotion',s.ui.tags.emo),chip('ent','entity',s.ui.tags.ent),
              chip('sch','schema',s.ui.tags.sch));
-  const spk=s.ui.speaker||'你';
+  const spk=s.ui.speaker||((LANG==='en')?'You':'Tu');
   $('spkNm').textContent=spk;
   $('spkAv').textContent=spk.slice(0,1);
   $('spkAv').style.background=SPK_COLOR[spk]||'#9b8cf0';
-  $('spkId').textContent= spk===i18n('you') ? i18n('voiceMatched')
+  $('spkId').textContent= (spk===i18n('you')||spk==='Tu'||spk==='You') ? i18n('voiceMatched')
     : 'speaker '+(spk.charCodeAt(0)%7+1)+i18n('voiceKnown', spk);
   renderRecall('l',s.ui.recallL); renderRecall('r',s.ui.recallR);
 }
@@ -1310,7 +1289,7 @@ function renderRecall(side,items){
   const ul=$(side==='r'?'recallR':'recallL'); ul.innerHTML='';
   if(!items.length){
     const li=document.createElement('li'); li.className='none';
-    // 空着的原因有好几种，写死一句「等待检索…」就分不出是哪种，只能猜。
+    // Several states can produce an empty list, so choose a specific status message.
     li.textContent = !live ? i18n('notConnected')
       : (LAST_HITS.at===0 ? i18n('waitRetrieve')
       : (side==='r' && LAST_HITS.rAll>0 ? i18n('rbInternalOnly', LAST_HITS.rAll)
@@ -1329,7 +1308,7 @@ function renderAll(){
   renderIO(currentSession()||{ui:blankUI()});
 }
 
-/* ── 侧栏交互 ─────────────────────────────────────────────────────── */
+/* ── Sidebar interactions ─────────────────────────────────────────── */
 $('btnCollapse').addEventListener('click',()=>{
   const c=app.classList.toggle('collapsed');
   $('btnCollapse').title=c?i18n('expand'):i18n('collapse');
@@ -1353,7 +1332,7 @@ document.addEventListener('keydown',e=>{
   }
 });
 
-/* ── 新对话：必须先选空间 ─────────────────────────────────────────── */
+/* ── New conversation: choose a space first ───────────────────────── */
 let pickSpace=activeSpace;
 function openModal(){
   pickSpace=activeSpace;
@@ -1369,7 +1348,7 @@ function openModal(){
 }
 $('btnNew').addEventListener('click',()=>{ app.classList.remove('collapsed'); openModal(); });
 
-/* 弹窗里那个「创建空间」：建完直接选中它，接着点「创建对话」就能在新空间里说话 */
+/* Create a space from the dialog, select it, then create a conversation there. */
 if($('newSpaceAdd')) $('newSpaceAdd').addEventListener('click',async()=>{
   const el=$('newSpaceName'), name=(el.value||'').trim();
   if(!name){ toast(i18n('needName')); el.focus(); return; }
@@ -1393,7 +1372,7 @@ $('mCreate').addEventListener('click',()=>{
   toast(i18n('createdIn', SPACES[pickSpace].name));
 });
 
-/* ── Chat / Memory Space 滑块 ─────────────────────────────────────── */
+/* ── Chat / Memory Space toggle ───────────────────────────────────── */
 const seg=$('seg'), track=$('track');
 seg.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
   const mem=b.dataset.v==='mem';
@@ -1402,7 +1381,7 @@ seg.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
   if(mem) setTimeout(window.VMBrain.resize,60);
 }));
 
-/* ── 导出 ─────────────────────────────────────────────────────────── */
+/* ── Export ───────────────────────────────────────────────────────── */
 function saveFile(text,name,mime){
   const url=URL.createObjectURL(new Blob([text],{type:mime}));
   const a=document.createElement('a'); a.href=url; a.download=name;
@@ -1417,7 +1396,7 @@ $('dlBtn').addEventListener('click',async()=>{
     const s=currentSession();
     if(!s||!s.turns.length){ toast(i18n('emptyChat')); return; }
     const md='# '+s.title+'\n\n> Memory Space: '+sp.name+'\n\n'+
-      s.turns.map(t=>(t.role==='user'?('**'+(t.speaker||'你')+'**\n\n'):'**VoiceMem**\n\n')+t.text)
+      s.turns.map(t=>(t.role==='user'?('**'+(t.speaker||i18n('you'))+'**\n\n'):'**VoiceMem**\n\n')+t.text)
         .join('\n\n---\n\n');
     saveFile(md,'voicemem-'+sp.id+'-chat-'+stamp()+'.md','text/markdown');
     toast(i18n('downloadedChat')); return;
@@ -1434,7 +1413,7 @@ $('dlBtn').addEventListener('click',async()=>{
   toast(i18n('downloadedN', n, sp.name));
 });
 
-/* ── 语音状态 / 波形 / 电平 / orb ─────────────────────────────────── */
+/* ── Voice state / waveform / level / orb ────────────────────────── */
 const voice=$('voice'), voiceLab=$('voiceLab');
 const LAB={idle:i18n('idle'),user:i18n('listening'),ai:i18n('replying'),paused:i18n('paused')};
 function setVoice(s){
@@ -1523,7 +1502,7 @@ function orbPoint(th,t,si,R,a,sq){
   })(last);
 })();
 
-/* ── 一轮问答（模拟 / 打字共用） ──────────────────────────────────── */
+/* ── One response turn (shared by simulation and typing) ─────────── */
 let busy=false, turnSess=null;
 function addTurn(s,role,text,speaker){
   s.turns.push({role,text,speaker});
@@ -1544,44 +1523,40 @@ function applyHits(s,sp,ex){
 }
 
 
-/* ── 打字轮 ───────────────────────────────────────────────────────── */
+/* ── Text input ───────────────────────────────────────────────────── */
 $('textIn').addEventListener('keydown',e=>{
   if(e.key!=='Enter') return;
   const t=e.target.value.trim(); if(!t) return;
   e.target.value='';
-  // 还没有任何会话时 currentSession() 是 null——删掉演示数据之后，页面一打开就是
-  // 这个状态。以前这里直接读 s.space，一打字就 TypeError，整个脚本停在这儿。
+  // With no sessions, currentSession() is null; create one before sending text.
   let s=currentSession();
-  if(live&&ws&&ws.readyState===1){          // 连着后端就走真的
+  if(live&&ws&&ws.readyState===1){          // Use the live backend when connected.
     if(!s) s=createSession(activeSpace);
     s.ui.input=t; s.ui.speaker=i18n('you'); paint(s);
     ws.send(JSON.stringify({type:'user_text',text:t}));
     return;
   }
-  // 没连后端就别自己编一个回复——那正是以前让人分不清"真记住了"和"演出来的"
-  // 的地方。如实说要先连上。
+  // Do not fabricate a reply without the backend; report that the connection is required.
   toast(i18n('notConnected'));
 });
 
-/* ── 真实后端 ─────────────────────────────────────────────────────── */
+/* ── Real backend ─────────────────────────────────────────────────── */
 const params=new URLSearchParams(location.search);
-// 跟着页面自己的地址走，别写死端口。
+// Follow the page address instead of hard-coding a port.
 //
-// location.host 已经带端口（本地是 localhost:8787），而放到 Tailscale Funnel /
-// 反向代理后面时是 443，URL 里没有端口——硬拼 ':8787' 会让线上版去连一个根本没
-// 开的端口，页面打得开、一点「开始对话」就连不上。
-// ?ws=host:port 仍可手动指定（前后端分开跑时用）。
+// location.host already includes the port locally and works behind a reverse proxy.
+// Use ?ws=host:port when frontend and backend run separately.
 const WS_HOST=params.get('ws')||location.host||'localhost:8787';
 const WS_URL=(location.protocol==='https:'?'wss://':'ws://')+WS_HOST+'/ws';
-const SAMPLE_RATE=24000;          // 必须和 run.py 的 MIC_RATE 一致
+const SAMPLE_RATE=24000;          // Must match MIC_RATE in run.py.
 let ws=null, live=false, paused=false;
 
-/* --- 播放 ---------------------------------------------------------- */
+/* --- Playback ------------------------------------------------------ */
 /* Continuous PCM playback with adaptive jitter buffering. */
 let playCtx=null, pcmNode=null, pcmReady=null, pcmPending=[], pcmDrainPending=false;
 let pcmStreaming=false, pcmDrainWaiters=[], pcmPrebuffer=0.08, pcmWorkletFailed=false;
 let pcmBargePaused=false, pcmOutputId='', pcmOutputSampleRate=SAMPLE_RATE;
-let scheduled=[], nextPlay=0;             // 只给“回放原始录音”这类完整 AudioBuffer 用
+let scheduled=[], nextPlay=0;             // Used for complete AudioBuffer playback.
 
 function resolvePcmDrain(){
   pcmStreaming=false;
@@ -1623,7 +1598,7 @@ function initPcmPlayer(){
         resolvePcmDrain();
       }else if(m.type==='underflow'){
         setSpokenCaptionPlaying(false);
-        if(window.VM_DEBUG) console.debug('[audio] 自适应缓冲',m.targetMs+'ms');
+        if(window.VM_DEBUG) console.debug('[audio] Adaptive buffer',m.targetMs+'ms');
       }
     };
     configurePcmPlayer();
@@ -1634,7 +1609,7 @@ function initPcmPlayer(){
     if(pcmDrainPending){ pcmDrainPending=false; pcmNode.port.postMessage({type:'drain'}); }
   }).catch(e=>{
     pcmWorkletFailed=true; pcmReady=null;
-    console.warn('[audio] AudioWorklet 不可用，回退到旧播放器',e);
+    console.warn('[audio] AudioWorklet unavailable; falling back to legacy player',e);
     for(const item of pcmPending.splice(0)) legacyPlayPcm(item.samples);
     if(pcmDrainPending){ pcmDrainPending=false; resolvePcmDrain(); }
   });
@@ -1692,7 +1667,7 @@ function stopPlayback(reason='reset'){
   pcmOutputId='';
   resolvePcmDrain();
   for(const s of scheduled.splice(0)){ try{ s.stop(); }catch(e){} }
-  releaseMic();                 // 回放被打断，麦克风不该还被挂着
+  releaseMic();                 // Stop the microphone when playback is interrupted.
   if(playCtx) nextPlay=playCtx.currentTime;
 }
 function pausePlaybackForBarge(){
@@ -1709,23 +1684,15 @@ function resumePlaybackAfterBarge(){
   setSpokenCaptionPlaying(true);
 }
 
-/* --- 麦克风 -------------------------------------------------------- */
-// 助手说话时要不要闭麦（半双工）。
+/* --- Microphone ---------------------------------------------------- */
+// Whether to mute the microphone while the assistant speaks (half duplex).
 //
-// getUserMedia 已经开了 echoCancellation，但浏览器 AEC 压不干净外放的声音：
-// 残余进 ASR 之后有两个后果——没人说话它也开一轮，以及它把自己正在说的话当成
-// 插话、说半句就停。llm_tts 这条路上没有别的回声消除（realtime 那条是 OpenAI
-// 在服务端做的），所以只能在源头挡。
-//
-// 代价是**说话期间不能插话打断**，所以默认不开。
-// 默认**关**：回声改在服务端按内容挡（_is_echo），麦克风保持常开，打断才用得了。
-// 外放且环境很糟、服务端还是挡不住时，再 localStorage.setItem('vm-half-duplex','1')
-// 换成闭麦——那是拿打断换干净，不得已才用。
+// Browser echo cancellation may not fully suppress speaker output. Half duplex
+// prevents self-interruption, but disables barge-in, so it is off by default.
 const HALF_DUPLEX = localStorage.getItem('vm-half-duplex') === '1';
-// 尾巴：音频调度结束之后再多闭一会儿，收房间混响和扬声器余音。
+// Keep the microphone muted briefly after scheduled audio ends.
 const AEC_TAIL_S = 0.25;
-// 助手此刻是不是还在出声。nextPlay 是所有已排队音频的结束时刻，比拍定时器准——
-// answer_done 只说明文字生成完了，缓冲里的音频往往还要再放好几秒。
+// Check whether the assistant is still audible; queued audio can outlast answer_done.
 function assistantAudible(){
   return !!playCtx && playCtx.currentTime < nextPlay + AEC_TAIL_S;
 }
@@ -1760,7 +1727,7 @@ async function startMic(){
   micProc=micCtx.createScriptProcessor(2048,1,1);
   micProc.onaudioprocess=e=>{
     if(!ws||ws.readyState!==1||paused||replaying) return;
-    if(HALF_DUPLEX && assistantAudible()) return;   // 闭麦，见上面
+    if(HALF_DUPLEX && assistantAudible()) return;   // Mute during assistant playback.
     const f32=e.inputBuffer.getChannelData(0);
     let peak=0; for(let i=0;i<f32.length;i++){ const v=Math.abs(f32[i]); if(v>peak) peak=v; }
     lvOn=peak>0.02;
@@ -1774,15 +1741,9 @@ function stopMic(){
   lvOn=false;
 }
 
-/* --- 后端的记忆 → 一个独立空间 -------------------------------------- */
-/* 不往 demo/mine 里塞：那两个是脚本空间，混进真记忆之后脚本里的 left:[2,3]
-   这类下标就指错了人。真数据单独一个空间，互不干扰。 */
-/* 后端当前打开的那个 Memory Space，就是 activeSpace。
-   
-   以前后端只有一个固定空间，前端拿一个叫 'live' 的虚拟空间来装它，于是
-   loadMemories 里有句 `if(activeSpace!==LIVE) return;`——切到 demo 之后
-   activeSpace 是 'demo'，这个判断永远成立，脑图就再也不重建了。
-   现在后端能切空间，真实记忆直接落在 activeSpace 上，那层虚拟空间没有了。 */
+/* --- Backend memories in an independent space ---------------------
+  Real data is kept separate from demo spaces and activeSpace tracks the
+  backend-selected space directly. */
 function ensureSpaceObj(id){
   if(SPACES[id]) return;
   SPACES[id]={id, name:id, desc:i18n('diskSpace'),
@@ -1800,25 +1761,18 @@ async function loadMemories(){
   }catch(e){ return; }
   const sp=SPACES[activeSpace];
 
-  // 记下刷新前每个节点挂着几条 note。一句新话多半是挂到**已有**节点下面
-  // （比如又一条「焦虑」），节点数不变，图上什么都看不出来——所以这里 diff
-  // 一下，谁多了 note 就让谁亮一下，用户才知道刚说的那句进去了。
+  // Compare note counts before and after refresh so updated nodes can be highlighted.
   const before={};
   for(const x of sp.left)  before['L:'+x.text]=1;
   for(const x of sp.right) before['R:'+x.text]=(x.notes||[]).length;
 
-  // 形状跟上面 SPACES 里那份演示数据**逐字段对齐**，脑图和卡片只认一种结构：
-  //   左脑 {text, slot, ents}
-  //   右脑 {text, cluster, src, desc, notes:[{text, emotion, cause}]}
-  // src 写成「情感记录 ×4」——演示数据就是这个样子，卡片底部直接显示。
+  // Keep one consistent structure for graph nodes and cards:
+  // left {text, slot, ents}; right {text, cluster, src, desc, notes}.
   sp.left=(m.left||[]).map(x=>({text:x.text,slot:x.slot||'daily_life',ents:x.entities||[]}));
   sp.right=(m.right||[]).map(x=>{
     const notes=x.notes||[];
     const src=(x.slot||'')+(notes.length?' ×'+notes.length:'');
-    // 脑图右半球只有三个锚点（RIGHT_SLOTS: emotion/personality/preference）。
-    // 后端用的词是 experiences（应对方式/表达风格/人物地点态度那几个 slot），
-    // 没有对应锚点 → labelOf() 返回 -1 → 节点无处安放，实测 28 个里 12 个
-    // 就这么消失了。在边界上对齐成 UI 的三类。
+    // Normalize backend experience categories to the three UI anchors.
     let cl=x.cluster||'personality';
     if(cl!=='emotion'&&cl!=='preference') cl='personality';
     return {text:x.text,cluster:cl,src:src,desc:x.desc||'',notes:notes};
@@ -1827,17 +1781,14 @@ async function loadMemories(){
   const grew=[];
   sp.left.forEach((x,i)=>{ if(!before['L:'+x.text]) grew.push(['L',i]); });
 
-  // 标签栏的实体：memory_hits 是在回复**之前**发的，那会儿这句话还没被抽取，
-  // 只能给个 0 成本的近似（后端从命中记忆里挑这句话提到过的）。真正的实体是跟
-  // 抽 fact / 定 slot 同一次 LLM 调用出来的，随新记忆一起落库——这里拿到就替换。
-  // 排除"因为被检索命中才保底进图"的那些——它们是旧记忆，不是这一轮新长出来的。
+  // memory_hits arrives before extraction, so it is only a temporary approximation.
+  // Replace it with entities produced by the same LLM call as fact and slot extraction.
   const fresh=grew.filter(g=>g[0]==='L').map(g=>sp.left[g[1]]).filter(x=>!x.hit);
   if(fresh.length){
     const ents=[];
     fresh.forEach(x=>(x.ents||[]).forEach(e=>{ if(e&&ents.indexOf(e)<0) ents.push(e); }));
-    // 只写回**发起这次轮询的那一轮**。不加这个判断的话，上一轮的轮询在你已经
-    // 说了下一句之后才回来，会把上一句的实体贴到这一句的标签栏上——看起来就是
-    // 「这轮没有实体就停留在上一轮」。
+    // Only update the turn that initiated this request; stale responses must not
+    // overwrite the labels of a newer turn.
     const cur=currentSession();
     if(cur&&ents.length&&watchTurn===turnSeq){
       cur.ui.tags.ent=ents.slice(0,6).join('、'); paint(cur);
@@ -1849,10 +1800,10 @@ async function loadMemories(){
   });
 
 
-  console.log('[vm] loadMemories: 左'+sp.left.length+' 右'+sp.right.length+' 条 → 重建脑图');
+  console.log('[vm] loadMemories: left='+sp.left.length+' right='+sp.right.length+'; rebuilding graph');
   buildGraph(activeSpace); renderAll();
 
-  // buildGraph 之后节点下标才有效
+  // Node indexes are valid only after buildGraph.
   const ids=[];
   for(const [side,i] of grew){
     const item=(side==='L'?sp.left:sp.right)[i];
@@ -1864,9 +1815,7 @@ async function loadMemories(){
   }
 }
 
-/* 后端发来的一条命中，对应脑图上哪个节点。
-   左脑按记忆原文找；右脑发的是 heartnote 的内容，而节点是实体，
-   所以要去实体的 notes 里找哪一条包含它。 */
+/* Map a backend hit to its graph node. */
 function leftNodesOf(hits){
   const sp=SPACES[activeSpace]; if(!sp) return [];
   const out=[];
@@ -1876,24 +1825,21 @@ function leftNodesOf(hits){
   }
   return out;
 }
-/* 后端发的 content 带前缀，形如 "[2026-08-22] ⚠ 避免重复：正文…"，
-   而快照里的 note 是干净正文——精确相等永远匹配不上。先把前缀剥掉再比。 */
+/* Backend content may contain a date and warning prefix; strip it before matching. */
 function bareNote(s){
   return String(s||'')
     .replace(/^\s*\[[^\]]*\]\s*/,'')      // [2026-08-22]
     .replace(/^[⚠✱*\s]+/,'')              // ⚠
-    .replace(/^[^：:]{2,8}[：:]\s*/,'')    // 避免重复：
+    .replace(/^[^：:]{2,8}[：:]\s*/,'')    // Remove the duplicate-warning prefix.
     .trim();
 }
 function rightNodesOf(hits){
   const sp=SPACES[activeSpace]; if(!sp) return [];
   const out=[];
   for(const h of hits){
-    const c=bareNote(h.raw||h.content);   // raw 是带前缀的原文，note 就是按它存的
+    const c=bareNote(h.raw||h.content);   // raw may contain the original prefix.
     if(!c) continue;
-    // 一条记忆常常同时挂在好几个节点下：既挂在「压力大时想被安抚」这种具体的
-    // 特质上，也挂在「Jiaqi」那个什么都装的人物节点上（实测 52 条 note）。
-    // 挑 note 最少的——note 越少越具体，射线指过去才有信息量。
+    // A memory can belong to several nodes; prefer the node with the fewest notes.
     const cands=[];
     sp.right.forEach((m,k)=>{
       if((m.notes||[]).some(n=>{
@@ -1903,14 +1849,12 @@ function rightNodesOf(hits){
     });
     cands.sort((a,b)=>(sp.right[a].notes||[]).length-(sp.right[b].notes||[]).length);
     let i = cands.length ? cands[0] : -1;
-    // 没挂到具体 note 的（比如 response_experience 根本不在快照里），
-    // 退一步按实体名 / 描述里是否提到来找
+    // If no concrete note is attached, fall back to entity name or description.
     if(i<0) i=sp.right.findIndex(m=>m.text&&c.indexOf(m.text)>=0);
     if(i>=0&&sp.right[i].node!==undefined&&out.indexOf(sp.right[i].node)<0){
       out.push(sp.right[i].node); continue;
     }
-    // profile 命中是 slot 级的（"喜好与厌恶：…"），没有对应的实体节点。
-    // 亮这个 slot 下的节点——那正是这条画像归纳自的那些。
+    // Profile hits are slot-level and have no entity node; highlight the slot node.
     if(h.slot){
       sp.right.forEach(m=>{
         if(m.node!==undefined && (m.src||'').indexOf(h.slot)===0
@@ -1921,7 +1865,7 @@ function rightNodesOf(hits){
   return out;
 }
 
-/* --- 消息处理 ------------------------------------------------------ */
+/* --- Message handling ---------------------------------------------- */
 let liveReply='', pendingMemoryClip='';
 let replyPlaybackGeneration=0;
 spokenCaption={session:null,target:'',shown:'',index:0,budget:0,playing:false,
@@ -1965,7 +1909,7 @@ function captionCost(ch){
   if(/[。！？!?]/.test(ch)) return 1.15;
   if(/[，、；;：:,.]/.test(ch)) return .55;
   if(/\s/.test(ch)) return .16;
-  return .34;                              // 拉丁字母按“词”而不是逐字等长计时
+  return .34;                              // Latin text is timed by word rather than character.
 }
 function resetSpokenCaption(s){
   if(spokenCaption.frame) cancelAnimationFrame(spokenCaption.frame);
@@ -2019,7 +1963,7 @@ function completeSpokenCaption(text){
 function handle(m){
   if(window.VM_DEBUG) console.log('[vm]', m.type, m);
   const s=currentSession();
-  if(!s){ console.warn('[vm] 收到 '+m.type+' 但当前没有会话，丢弃'); return; }
+  if(!s){ console.warn('[vm] Received '+m.type+' without an active session; ignored'); return; }
   switch(m.type){
     case 'session_ready':
       // Chained TTS uses a larger initial jitter buffer.
@@ -2031,11 +1975,10 @@ function handle(m){
       setVoice('user'); s.ui.input=m.text; paint(s); break;
 
     case 'user_transcript':
-      // 新的一轮：先把上一轮的标签清掉。这一轮抽出什么，等 ingest 完了再填。
-      // 不清的话，说一句抽不出东西的话（「啦啦啦」），标签栏还挂着上一句的实体。
+      // Start a new turn by clearing labels; extraction fills them after ingest.
       s.ui.tags={emo:'',ent:'',sch:''};
       lvOn=false; s.ui.input=m.text; paint(s);
-      addTurn(s,'user',m.text,s.ui.speaker||'你'); break;
+      addTurn(s,'user',m.text,s.ui.speaker||i18n('you')); break;
 
     case 'memory_hits': {
       const L=m.left_brain||[], R=m.right_brain_hits||[];
@@ -2050,19 +1993,16 @@ function handle(m){
                  r:R.filter(h=>!h.internal).length};
       const li=leftNodesOf(L), ri=rightNodesOf(R);
       const sp=SPACES[activeSpace];
-      console.log('[vm] 脑图: 空间里 左'+(sp?sp.left.length:'?')+'/右'+(sp?sp.right.length:'?')+
-                  ' 节点；本轮命中 左'+li.length+'/右'+ri.length+
-                  (ri.length?'':'  ← 右脑没有可亮的节点'));
+      console.log('[vm] graph: space left='+(sp?sp.left.length:'?')+'/right='+(sp?sp.right.length:'?')+
+          ' nodes; hits left='+li.length+'/right='+ri.length+
+          (ri.length?'':'  <- no right-side node to highlight'));
       window.VMBrain.highlight(li.concat(ri));
       window.VMBrain.beam(li,ri);
       break;
     }
 
     case 'answer_start':
-      // 先把上一轮**还没播完**的音频丢掉。服务端在开新一轮前会 cancel 掉旧任务，
-      // 但那时旧音频早就发过来、正排在 playCtx 的调度队列里了——不清的话新一轮
-      // 会接在它后面播，两段交织，听起来就是"语句不通顺"。
-      // 提前合成下一段之后缓冲更深，这个问题也更明显。
+      // Clear queued audio from the previous turn before starting the next response.
       stopPlayback('reset');
       beginPcmOutput(m.output_id,m.sample_rate);
       replyPlaybackGeneration++;
@@ -2096,10 +2036,8 @@ function handle(m){
         if(memoryClip) playMemoryClip(memoryClip);
       });
       titleFor(s);
-      // 事实和图谱是后台线程写的（async_facts=True）。实测一轮要 15.9s——抽事实
-      // 那次 LLM 往返本身就占大头，触发巩固的那轮更久。定死几个时间点去刷新
-      // 总会猜错（原来只刷 2.5s，永远赶在写完之前，用户说了新东西右脑没动静）。
-      // 改成轮询到真的变了为止，最多盯 40 秒。
+      // Facts and graph data are written by an async backend task. Poll until
+      // the snapshot changes, with a maximum wait of 40 seconds.
       watchMemories();
       break;
 
@@ -2113,8 +2051,8 @@ function handle(m){
       stopPlayback('interrupted'); aiSpeaking=false; setVoice('user'); break;
 
     case 'tag_update': {
-      // 声学情绪是后台算的（2.3 秒），算准了才补这一条。热路径上先发的是文本
-      // 语义那份，这里只覆盖情绪，别动实体和槽位。
+      // Acoustic emotion is computed in the background and updates only emotion,
+      // leaving entities and slots untouched.
       const s2=currentSession(); if(!s2) break;
       if(m.emotion){ s2.ui.tags.emo=m.emotion; paint(s2); }
       break;
@@ -2129,14 +2067,11 @@ function handle(m){
   }
 }
 
-/* 说完一轮之后盯着后端，等后台线程把记忆写完。
-   写完的标志是记忆条数变了；40 秒还没动静就放弃（这一轮可能本来就没什么可存的，
-   比如问句、或者说的事实库里已经有了）。 */
+/* After a turn, wait for the backend task to persist memories; stop after 40 seconds. */
 let watchTimer=null, watchTurn=0, turnSeq=0;
-//: 最近一次 memory_hits 的数量，给空状态显示原因用
+//: Number of hits in the latest memory response, used for empty-state diagnostics.
 let LAST_HITS={at:0,l:0,r:0,rAll:0};
-// 快照是有上限的（左脑 48 条 / 每 slot 7 条，右脑每 slot 6 个），加一条记忆
-// 常常**不改变总数**，只是换掉了里面某一条。所以比内容指纹，不比条数。
+// Snapshots are capped, so compare content fingerprints instead of counts.
 function memSignature(){
   const sp=SPACES[activeSpace];
   if(!sp) return '';
@@ -2156,20 +2091,10 @@ function watchMemories(){
   },2000);
 }
 
-/* 把当时那段原声放回来。走放回复的那个 AudioContext，接在回复队尾之后，
-   不然会和还在播的回复叠在一起。 */
-/* 回放当时那段录音的时候，别把它当成用户又说了一遍。
-
-   放出来的声音会从扬声器绕回麦克风。浏览器的 echoCancellation 挡得住助手的 TTS，
-   却挡不住这个——实测放完一段音乐，后端立刻多出一轮空文本（`[speculate] '' -> 0
-   hits`），左右脑都没命中，模型手上空空，于是回一句"抱歉，我没法直接重播"。
-   日志里那段音乐还被认成"第 2 次听到"。
-   所以回放期间干脆不上行，播完再留一点余量给房间余响。 */
-//: 回放最多等助手的语音排队多久。
-//:
-//: 录音要排在助手那句引出语**后面**——先听它说"我把当时那段找出来了"，再听录音。
-//: 这个上限只是防呆：万一 TTS 队列因为别的原因堆了很久，不至于让人干等。
-//: 之前设成 4 秒，结果助手话还没说完录音就插进来了，顺序整个反过来。
+/* Replay the original recording after queued response audio. Do not upload
+  replayed audio to the microphone path. */
+//: Maximum wait for queued assistant audio before replaying.
+//: Replay after the assistant introduction and impose a timeout as a safeguard.
 const REPLAY_MAX_WAIT_S=20;
 let replaying=false, replayTimer=null;
 function holdMic(ms){
@@ -2183,25 +2108,24 @@ async function playMemoryClip(id){
   if(!id) return;
   try{
     const r=await fetch('/api/audio/'+encodeURIComponent(id));
-    if(!r.ok){ console.warn('[replay] 取录音失败', id, r.status); return; }
+    if(!r.ok){ console.warn('[replay] Failed to fetch recording', id, r.status); return; }
     const ctx=ensurePlayback();
     const buf=await ctx.decodeAudioData(await r.arrayBuffer());
     const src=ctx.createBufferSource(); src.buffer=buf; src.connect(ctx.destination);
     scheduled.push(src);
-    // 排在助手那句引出语后面，但**别无限等下去**：realtime 的音频块是流式排队的，
-    // nextPlay 会一直往后推，等它排完可能是十几秒后——用户早就以为"没播"了。
-    // 排在已排队的语音之后（nextPlay），别抢在助手说完之前。
+    // Wait after queued speech, but never indefinitely: streamed audio can keep
+    // extending nextPlay and otherwise make the replay appear to be missing.
     const wait=Math.min(Math.max(0,nextPlay-ctx.currentTime),REPLAY_MAX_WAIT_S);
     const at=ctx.currentTime+wait+0.25;
     src.start(at); nextPlay=at+buf.duration;
-    console.log('[replay] 放录音', id, buf.duration.toFixed(1)+'s',
-                wait>REPLAY_MAX_WAIT_S?'（不再等 TTS 排完）':'（等 '+wait.toFixed(1)+'s）');
+    console.log('[replay] Playing recording', id, buf.duration.toFixed(1)+'s',
+          wait>REPLAY_MAX_WAIT_S?' (maximum TTS wait reached)':' (wait '+wait.toFixed(1)+'s)');
     holdMic((at-ctx.currentTime+buf.duration)*1000+400);
     src.onended=()=>{ setTimeout(releaseMic,400); };
-  }catch(e){ console.warn('[replay] 播放失败', e); releaseMic(); }
+  }catch(e){ console.warn('[replay] Playback failed', e); releaseMic(); }
 }
 
-/* 用后端的小模型给这条对话起个概括性的标题，只在第二轮之后叫一次 */
+/* Ask the backend model for a concise conversation title after the second turn. */
 async function titleFor(s){
   if(s.titled||s.turns.length<2) return;
   s.titled=true;
@@ -2215,7 +2139,7 @@ async function titleFor(s){
   }catch(e){}
 }
 
-/* --- 开始 / 结束 --------------------------------------------------- */
+/* --- Start / stop -------------------------------------------------- */
 const talkBtn=$('talkBtn'), pauseBtn=$('pauseBtn');
 function syncButtons(){
   talkBtn.textContent=live?i18n('talkEnd'):i18n('talkStart');
@@ -2234,14 +2158,12 @@ talkBtn.addEventListener('click',async()=>{
   if(live){ endLive(i18n('ended')); return; }
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
     toast(i18n('micUnsupported')); return; }
-  ensurePlayback();               // 必须在这个 click 里建，见 ensurePlayback 注释
+  ensurePlayback();               // Create playback from the user gesture.
   try{ ws=new WebSocket(WS_URL); }catch(e){ toast(i18n('cantConnect', WS_HOST)); return; }
   ws.binaryType='arraybuffer';
   ws.onopen=async()=>{
     live=true;
-    // 先建会话再拉记忆。反过来的话 loadMemories 那几百毫秒里如果已经来了
-    // memory_hits，它会渲染进**旧的**那个 session，紧接着新 session 一建面板就
-    // 空了——表现就是右脑栏一直停在「等待检索…」。
+    // Create the session before loading memories so early hits cannot land in an old session.
     ensureSpaceObj(activeSpace);
     createSession(activeSpace);
     await loadMemories();
@@ -2251,16 +2173,15 @@ talkBtn.addEventListener('click',async()=>{
   };
   ws.onmessage=ev=>{
     if(ev.data instanceof ArrayBuffer){
-      try{ playPcm(ev.data); }catch(e){ console.warn('[audio] 丢帧',e); }
+      try{ playPcm(ev.data); }catch(e){ console.warn('[audio] Dropped frame',e); }
       return;
     }
     let msg;
     try{ msg=JSON.parse(ev.data); }
-    catch(e){ console.error('[vm] JSON 解析失败', e, ev.data); return; }
-    // 出错要看得见：handle 里任何一行抛了，后面所有轮次都不会再渲染，
-    // 表现就是「点了开始对话之后什么都不更新」，而控制台如果只 warn 很容易漏掉。
+    catch(e){ console.error('[vm] JSON parse failed', e, ev.data); return; }
+    // Log handler errors clearly so later turns do not silently stop rendering.
     try{ handle(msg); }
-    catch(e){ console.error('[vm] 处理 '+msg.type+' 出错：', e); }
+    catch(e){ console.error('[vm] Failed to handle '+msg.type+':', e); }
   };
   ws.onclose=()=>{ endLive(i18n('backendGone')); };
   ws.onerror=()=>{ toast(i18n('cantConnect', WS_HOST)); };
@@ -2273,36 +2194,31 @@ pauseBtn.addEventListener('click',()=>{
 });
 syncButtons();
 
-/* ── 语言切换 ─────────────────────────────────────────────────────── */
+/* ── Language switching ───────────────────────────────────────────── */
 if($('langSel')){
   $('langSel').value = LANG;
   $('langSel').addEventListener('change', async e=>{
     LANG = e.target.value === 'en' ? 'en' : 'it';
     localStorage.setItem('vm-lang', LANG);
     applyLang();
-    renderAll();                       // 动态文案（侧栏、空状态、标签）跟着重画
+    renderAll();                       // Re-render dynamic labels and empty states.
     fillSpaceSel();
-    buildGraph(activeSpace);           // 脑图上那十个分区标签只在重建时才会换语言
+    buildGraph(activeSpace);           // Rebuild graph labels in the selected language.
     loadMemories();
-    // 助手也跟着换语言：告诉后端，之后的回复和抽取都用这个语言
+    // Tell the backend to use the selected language for future responses and extraction.
     try{ await fetch('/api/lang',{method:'POST',
       headers:{'Content-Type':'application/json'},body:JSON.stringify({lang:LANG})}); }
-    catch(err){ console.warn('[lang] 后端没接上', err); }
+    catch(err){ console.warn('[lang] Backend unavailable', err); }
   });
 }
 
-/* ── 启动 ─────────────────────────────────────────────────────────── */
+/* ── Startup ──────────────────────────────────────────────────────── */
 applyLang();
-// SPACES 一开始是空的（演示数据删掉之后就没有预置内容了），先占个位，
-// 免得第一次 buildGraph/renderAll 读到 undefined；真实内容由 loadSpaces 拉回来。
+// Reserve the active space before the backend list arrives.
 ensureSpaceObj(activeSpace);
 buildGraph(activeSpace);
 renderAll();
-// 先拿空间列表，再拉当前空间的记忆铺脑图。
-//
-// 少了第二步的话，页面一打开脑图是空的——buildGraph 在这之前跑，那会儿 SPACES
-// 里还只是个空壳。切到别的空间再切回来反倒有内容（switchSpace 里调了
-// loadMemories），看着像"第一次进来会丢记忆"。
+// Load spaces first, then memories, so the initial graph is populated correctly.
 loadSpaces().then(loadMemories);
 fetch('/api/lang',{method:'POST',headers:{'Content-Type':'application/json'},
                    body:JSON.stringify({lang:LANG})}).catch(()=>{});

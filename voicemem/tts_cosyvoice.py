@@ -55,7 +55,8 @@ class CosyVoice3TTS:
                  fp16: bool = False, **_: Any) -> None:
         if default_language not in ("it", "en"):
             raise ValueError("CosyVoice supporta solo le lingue it ed en")
-        self.model_path = model or os.environ.get("VOICEMEM_COSYVOICE_MODEL") or self.MODEL_ID
+        default_model = Path(__file__).resolve().parents[1] / "models" / "tts" / "Fun-CosyVoice3-0.5B-2512"
+        self.model_path = model or os.environ.get("VOICEMEM_COSYVOICE_MODEL") or str(default_model)
         default_ref = Path(__file__).resolve().parents[1] / "assets" / "italian.wav"
         self.ref_audio = (ref_audio or os.environ.get("VOICEMEM_COSYVOICE_REF_AUDIO")
                   or (str(default_ref) if default_ref.is_file() else None))
@@ -72,6 +73,16 @@ class CosyVoice3TTS:
         if self._model is None:
             with self._load_lock:
                 if self._model is None:
+                    model_path = Path(self.model_path).expanduser()
+                    if not model_path.is_dir():
+                        raise FileNotFoundError(
+                            "Modello CosyVoice3 locale non trovato: "
+                            f"{model_path}. Esegui scripts/download_models.sh "
+                            "oppure imposta VOICEMEM_COSYVOICE_MODEL su una directory locale."
+                        )
+                    # Prevent optional CosyVoice frontends from contacting ModelScope.
+                    # Italian/English synthesis does not need the Chinese wetext frontend.
+                    os.environ.setdefault("COSYVOICE_LOCAL_ONLY", "1")
                     try:
                         os.environ.setdefault("MODELSCOPE_CACHE", str(Path.home() / ".cache" / "modelscope"))
                         os.environ.setdefault("MODELSCOPE_SDK_DEBUG", "0")
@@ -91,7 +102,7 @@ class CosyVoice3TTS:
                             "CosyVoice non installato. Esegui scripts/setup_cosyvoice.sh"
                         ) from exc
                     self._model = AutoModel(
-                        model_dir=self.model_path,
+                        model_dir=str(model_path),
                         load_trt=self.load_trt,
                         load_vllm=self.load_vllm,
                         fp16=self.fp16,
