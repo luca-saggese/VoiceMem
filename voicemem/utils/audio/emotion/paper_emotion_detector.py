@@ -67,7 +67,17 @@ def _load_omni(model_path: str, *, device_map: str) -> tuple[Any, Any, Any]:
     这里而不是 import 那个脚本——``examples/`` 不是包的一部分，不应该被
     运行时代码依赖。"""
     import torch
-    from transformers import AutoTokenizer, Qwen2_5OmniProcessor, Qwen2_5OmniThinkerForConditionalGeneration
+    try:
+        from transformers import (
+            AutoTokenizer,
+            Qwen2_5OmniProcessor,
+            Qwen2_5OmniThinkerForConditionalGeneration,
+        )
+    except ImportError as exc:
+        raise RuntimeError(
+            "Qwen Omni non compatibile con la versione installata di transformers; "
+            "uso il classificatore acustico VAD"
+        ) from exc
 
     processor = Qwen2_5OmniProcessor.from_pretrained(model_path, trust_remote_code=True)
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
@@ -131,7 +141,7 @@ class PaperAlignedEmotionDetector:
             if "torchvision" in str(e).lower() or "Torchvision" in str(e):
                 hint = ("\n  [emotion]   → 缺 torchvision。装上就好：pip install torchvision"
                         "\n  [emotion]     （不装的话情绪只靠声学象限判，右脑的情感记忆不可信）")
-            print(f"  [emotion] ⚠ Qwen-Omni 归因器加载失败，情绪退回纯声学粗分类: {e}{hint}",
+            print(f"  [emotion] Qwen-Omni non disponibile, uso VAD acustico: {e}{hint}",
                   flush=True)
             self._attributor_failed = True
             return None
@@ -142,7 +152,7 @@ class PaperAlignedEmotionDetector:
         try:
             vad = self._vad.estimate(str(audio_path))
         except Exception as e:
-            print(f"  [emotion] VAD 估计失败: {e}", flush=True)
+            print(f"  [emotion] stima VAD fallita: {e}", flush=True)
             return "未知"
 
         if not is_negative_vad_significant(vad, self._config):
@@ -166,5 +176,5 @@ class PaperAlignedEmotionDetector:
             print(f"  [emotion] Qwen-Omni 归因 → {label!r} (VAD={vad})", flush=True)
             return label or _vad_to_label(vad.valence, vad.arousal)
         except Exception as e:
-            print(f"  [emotion] Qwen-Omni 归因失败，退回 VAD 粗分类: {e}", flush=True)
+            print(f"  [emotion] attribuzione Qwen-Omni fallita, uso VAD acustico: {e}", flush=True)
             return _vad_to_label(vad.valence, vad.arousal)
