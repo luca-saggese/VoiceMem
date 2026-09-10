@@ -173,7 +173,7 @@ class PaperAlignedEmotionDetector:
                 left_memory_block="", emotion_graph_context=None, turn=turn,
             )
             label = (result.emotion.label or "").strip()
-            print(f"  [emotion] Qwen-Omni 归因 → {label!r} (VAD={vad})", flush=True)
+            print(f"  [emotion] attribuzione Qwen-Omni → {label!r} (VAD={vad})", flush=True)
             return label or _vad_to_label(vad.valence, vad.arousal)
         except Exception as e:
             print(f"  [emotion] attribuzione Qwen-Omni fallita, uso VAD acustico: {e}", flush=True)

@@ -1773,12 +1773,12 @@ async def _remember_background(pending, reply: str, owner: dict,
     async with _REMEMBER_LOCK:
         waited = time.monotonic() - queued_at
         if waited > 0.05 and BARGE_DEBUG:
-            print(f"[memory] 入库排队 {waited:.2f}s", flush=True)
+            print(f"[memory] coda ingest {waited:.2f}s", flush=True)
         started = time.monotonic()
         await asyncio.to_thread(
             remember_turn, pending, reply, owner, history_turn_id, memory_vm)
         if BARGE_DEBUG:
-            print(f"[memory] 入库主流程 {time.monotonic()-started:.2f}s", flush=True)
+            print(f"[memory] ingest completato in {time.monotonic()-started:.2f}s", flush=True)
 
 
 def queue_remember_turn(pending, reply: str, owner: dict,
@@ -1994,7 +1994,7 @@ async def anticipate(sock, on_frame=None, on_speech=None, owner=None, is_busy=No
             candidate_silence = 0.0
             candidate_age = 0.0
             if BARGE_DEBUG:
-                print("[barge] 疑似插话 → 暂停播放，等待 ASR 确认", flush=True)
+                print("[barge] possibile interruzione → pausa audio, attendo conferma ASR", flush=True)
             if on_candidate:
                 await on_candidate()
 
@@ -2017,7 +2017,7 @@ async def anticipate(sock, on_frame=None, on_speech=None, owner=None, is_busy=No
                 barge_base = len(cur)
                 if BARGE_DEBUG:
                     why = "明确停止指令" if _is_explicit_interrupt(cur) else "转写连续稳定增长"
-                    print(f"[barge] {why} → 确认打断：{cur[-16:]!r}", flush=True)
+                    print(f"[barge] interruzione confermata ({why}): {cur[-16:]!r}", flush=True)
                 if on_speech:
                     await on_speech()
             elif ((candidate_silence * 1000 >= BARGE_REJECT_SILENCE_MS and not cur)
@@ -2066,12 +2066,12 @@ async def anticipate(sock, on_frame=None, on_speech=None, owner=None, is_busy=No
                 if confirmed:
                     barged = True
                     if BARGE_DEBUG:
-                        print(f"[barge] 完整回合确认插话：{final_text!r}", flush=True)
+                        print(f"[barge] turno completo confermato come interruzione: {final_text!r}", flush=True)
                     if on_speech:
                         await on_speech()
                 else:
                     if BARGE_DEBUG:
-                        print(f"[barge] 完整回合判为附和/回声/噪声 → 恢复：{final_text!r}",
+                        print(f"[barge] turno classificato come backchannel/eco/rumore → ripristino: {final_text!r}",
                               flush=True)
                     if on_candidate_reject:
                         await on_candidate_reject()
@@ -2086,7 +2086,7 @@ async def anticipate(sock, on_frame=None, on_speech=None, owner=None, is_busy=No
             # 我们正在放录音，而这一轮一个字都没转出来：那是自己的声音绕回来了。
             if _replaying_now() and not (st.turn.text or "").strip():
                 if BARGE_DEBUG:
-                    print("[replay] 回放期间的空白一轮，是自己的回声，丢掉", flush=True)
+                    print("[replay] turno vuoto durante il playback: probabilmente eco, scartato", flush=True)
                 last_partial = ""
                 barge_base = 0
                 barged = False
@@ -2432,7 +2432,7 @@ async def realtime_session(sock):
                 if interrupted:
                     reply = timeline.heard_text() if timeline else ""
                     if BARGE_DEBUG and timeline:
-                        print(f"[context] 打断于 {timeline.rendered_ms()}ms，保留回复 "
+                        print(f"[context] interrotto a {timeline.rendered_ms()}ms, risposta conservata "
                               f"{reply!r}", flush=True)
                 history_turn_id = _push_history(
                     context_session, space, p.text, reply,
@@ -2482,7 +2482,7 @@ async def realtime_session(sock):
                                 # 首帧音频延迟：response.create 发出去到 OpenAI 吐第一块
                                 # 声音之间的时间。这是"它反应慢"里我们控制不了的那半。
                                 turn["first"] = True
-                                print(f"[lat] realtime 首帧 "
+                                print(f"[lat] primo frame realtime "
                                       f"{(time.monotonic()-turn['t0'])*1000:.0f}ms", flush=True)
                             pcm = base64.b64decode(ev.delta)
                             timeline = turn["timeline"]
@@ -2522,19 +2522,19 @@ async def realtime_session(sock):
                         if code not in (
                                 "input_audio_buffer_commit_empty",
                                 "response_cancel_not_active"):
-                            print(f"[web] realtime 事件错误：{err or ev}", flush=True)
+                            print(f"[web] errore evento realtime: {err or ev}", flush=True)
                     elif t.endswith("input_audio_buffer.speech_stopped"):
                         # OpenAI 判"你说完了"的时刻。跟本地 silero 判完（我们发
                         # response.create 那一刻）比，谁早谁晚——早的那个才是
                         # 真正的 EOU 下限，晚的那部分是白等的。
                         turn["stopped"] = time.monotonic()
                         if BARGE_DEBUG:
-                            print("[lat] OpenAI 判说完", flush=True)
+                            print("[lat] OpenAI ha rilevato la fine del parlato", flush=True)
                     elif t.endswith("input_audio_buffer.speech_started"):
                         # OpenAI 的 VAD 听到人声：它那侧已经掐了回复，我们同步收尾
                         since = (time.monotonic() - turn["t0"]) * 1000
                         if BARGE_DEBUG:
-                            print(f"[barge] OpenAI VAD 听到人声 (live={turn['live']}, "
+                            print(f"[barge] VAD OpenAI ha rilevato voce (live={turn['live']}, "
                                   f"还在播={hearing()}, {since:.0f}ms)", flush=True)
                         # 宽限期，跟本地那条路一样。本地 VAD 判完一轮（静音 500ms）就
                         # 发 response.create，而 OpenAI 的 server_vad 只要 320ms 静音就
@@ -2548,7 +2548,7 @@ async def realtime_session(sock):
                         # done/cancelled 事件释放下一轮 response 的创建屏障。
                         response_idle.set()
                         if BARGE_DEBUG and not turn["live"]:
-                            print("[barge] 旧 Realtime response 已退出", flush=True)
+                            print("[barge] risposta Realtime precedente terminata", flush=True)
                         if turn["live"]:
                             timeline = turn["timeline"]
                             if timeline:
@@ -2594,7 +2594,7 @@ async def realtime_session(sock):
                 nonlocal candidate_paused, candidate_paused_at
                 if not hearing():
                     if BARGE_DEBUG:
-                        print("[barge] 有人声但助手没在说，忽略", flush=True)
+                        print("[barge] voce rilevata ma l'assistente non parla: ignorata", flush=True)
                     return
                 # 刚开口那一小段不许打断：那时候麦克风里几乎只有助手自己的声音，
                 # 回声消除还没跟上，很容易一出声就把自己掐了。
