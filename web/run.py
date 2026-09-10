@@ -1357,10 +1357,10 @@ def fill_tags(payload: dict, text: str, audio_path: str = "",
 
     rb = payload.get("right_brain_hits") or []
     inner = sum(1 for h in rb if h.get("internal"))
-    print(f"[hits] 左脑 {len(payload.get('left_brain') or [])} 条  "
-          f"右脑 {len(rb)} 条(内部 {inner}，页面显示 {len(rb)-inner})  "
-          f"情绪={payload.get('emotion') or '-'}  "
-          f"实体={'、'.join(payload.get('entities') or []) or '-'}", flush=True)
+    print(f"[hits] left={len(payload.get('left_brain') or [])}  "
+          f"right={len(rb)} (internal={inner}, visible={len(rb)-inner})  "
+          f"emotion={payload.get('emotion') or '-'}  "
+          f"entities={','.join(payload.get('entities') or []) or '-'}", flush=True)
     return payload
 
 
@@ -1379,6 +1379,9 @@ async def voicemem_llm_tts(pending, send, send_audio, owner, timeline,
     """
     memory_vm = memory_vm or vm
     context_space = context_space or ACTIVE_SPACE
+    print(f"[llm] reply start space={context_space!r} model={utils.CHAT_MODEL!r} "
+          f"base_url={os.environ.get('OPENAI_BASE_URL') or 'default'} "
+          f"input_chars={len(pending.text or '')}", flush=True)
     await send({"type": "user_transcript", "text": pending.text})
     # 声学情绪**不在这儿算**。它要 2.3 秒（emotion2vec 跑整段音频），而这几行是
     # 用户说完到助手开口之间最要紧的一段——实测这一步就吃掉了 4.5 秒里的一半，
@@ -1432,13 +1435,20 @@ async def voicemem_llm_tts(pending, send, send_audio, owner, timeline,
 
             async def run(seg=seg, chunks=chunks, state=state):
                 try:
+                    print(f"[tts] start chars={len(seg)} backend={type(tts).__name__}",
+                          flush=True)
+                    first_chunk = True
                     async for chunk in _synth_one(seg):
+                        if first_chunk:
+                            print(f"[tts] first_chunk bytes={len(chunk)}", flush=True)
+                            first_chunk = False
                         await chunks.put(chunk)
                     state["complete"] = True
+                    print("[tts] complete", flush=True)
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:
-                    print(f"[web] 合成失败：{type(e).__name__}: {e}", flush=True)
+                    print(f"[tts] failed: {type(e).__name__}: {e}", flush=True)
                 finally:
                     await chunks.put(None)        # 出错也要让播放那边收工
 
@@ -1504,6 +1514,8 @@ async def voicemem_llm_tts(pending, send, send_audio, owner, timeline,
         if _lang_note():
             ctx = f"{ctx}\n\n{_lang_note()}" if ctx else _lang_note()
         async for d in memory_vm.reply_stream(pending.text, ctx):
+            if not reply:
+                print("[llm] first_delta", flush=True)
             reply += d
             buf += d
             timeline.append_text(d)
@@ -1521,6 +1533,12 @@ async def voicemem_llm_tts(pending, send, send_audio, owner, timeline,
             await queue.put((segment, start, start + len(segment)))
     except asyncio.CancelledError:
         interrupted = True                      # 用户插话了，这一轮到此为止
+    except Exception as exc:
+        print(f"[llm] failed: {type(exc).__name__}: {exc}", flush=True)
+        try:
+            await send({"type": "error", "message": f"LLM error: {type(exc).__name__}: {exc}"})
+        except Exception:
+            pass
     finally:
         await queue.put(None)                   # 生成出错也要让 speak() 收工
 
