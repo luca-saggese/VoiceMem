@@ -89,12 +89,14 @@ export function Sidebar({
           <PanelLeft />
         </button>
         <span className="grow" />
-        <button className="ico">
-          <Search />
-        </button>
-        <button className="ico" onClick={onNew} title="Nuova conversazione">
-          <SquarePen />
-        </button>
+        {!collapsed && <>
+          <button className="ico">
+            <Search />
+          </button>
+          <button className="ico" onClick={onNew} title="Nuova conversazione">
+            <SquarePen />
+          </button>
+        </>}
       </div>
       {!collapsed && (
         <>
@@ -246,6 +248,27 @@ export function Sidebar({
             </div>
           )}
         </>
+      )}
+      {collapsed && (
+        <div className="collapsed-account">
+          <button
+            className="account-trigger"
+            onClick={() => setAccountOpen((open) => !open)}
+            aria-expanded={accountOpen}
+            aria-label="Account"
+            title={user?.display_name || user?.email || "Account"}
+          >
+            <span className="account-avatar">{initials}</span>
+          </button>
+          {accountOpen && (
+            <div className="account-menu">
+              <div className="account-menu-head">{user?.email}</div>
+              <button className="account-logout" onClick={onLogout}>
+                <LogOut size={15} /> Esci
+              </button>
+            </div>
+          )}
+        </div>
       )}
     </aside>
   );
