@@ -5,6 +5,8 @@ utterance audio after VAD closes the turn and returns the raw nine-class scores.
 """
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -32,7 +34,16 @@ class Emotion2VecClassifier:
     def __init__(self, model: Any = None, model_id: str = MODEL_ID) -> None:
         if model is None:
             from funasr import AutoModel
-            model = AutoModel(model=model_id, hub="hf")
+            configured = os.environ.get("VOICEMEM_E2V_MODEL", "")
+            local = Path(configured) if configured else (
+                Path(os.environ.get("VOICEMEM_MODELS_DIR", "models")) / "emotion2vec"
+            )
+            if not local.is_dir() or not (local / "config.yaml").exists():
+                raise FileNotFoundError(
+                    f"Modello emotion2vec locale non trovato: {local}. "
+                    "Esegui bash scripts/download_models.sh"
+                )
+            model = AutoModel(model=str(local), hub="hf", disable_update=True)
         self.model = model
 
     def classify(self, samples: np.ndarray, sample_rate: int = 16000) -> AcousticEmotionResult:

@@ -1223,9 +1223,15 @@ def _acoustic_emotion(audio_path: str):
     """emotion2vec+（专门做语音情绪识别的模型）。返回 (标签, 分数)。"""
     if "m" not in _E2V:
         from funasr import AutoModel
-        _E2V["m"] = AutoModel(model=os.environ.get("VOICEMEM_E2V_MODEL",
-                                                   "emotion2vec/emotion2vec_plus_base"),
-                              hub="hf", disable_update=True)
+        from voicemem.utils.common.paths import models_dir
+        configured = os.environ.get("VOICEMEM_E2V_MODEL")
+        local = Path(configured) if configured else models_dir() / "emotion2vec"
+        if not local.is_dir() or not (local / "config.yaml").exists():
+            raise FileNotFoundError(
+                f"Modello emotion2vec locale non trovato: {local}. "
+                "Esegui bash scripts/download_models.sh"
+            )
+        _E2V["m"] = AutoModel(model=str(local), hub="hf", disable_update=True)
     r = _E2V["m"].generate(audio_path, granularity="utterance", extract_embedding=False)
     if not r:
         return "", 0.0
