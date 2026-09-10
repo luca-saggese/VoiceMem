@@ -6,6 +6,7 @@ The VoiceMem pipeline itself continues to consume and produce PCM16 mono audio.
 from __future__ import annotations
 
 import json
+import asyncio
 import struct
 import time
 import uuid
@@ -17,23 +18,32 @@ from fastapi import WebSocket
 
 INPUT_RATE = 16000
 OUTPUT_RATE = 24000
-FRAME_SAMPLES = int(OUTPUT_RATE * 0.06)
+DEVICE_RATE = 16000
+FRAME_DURATION_MS = 60
 
 
 class XiaozhiAudio:
-    def __init__(self, websocket: WebSocket):
+    def __init__(self, websocket: WebSocket, device_rate: int = DEVICE_RATE,
+                 frame_duration_ms: int = FRAME_DURATION_MS):
         self.websocket = websocket
+        self.device_rate = int(device_rate)
+        self.frame_duration_ms = max(2, int(frame_duration_ms))
         self.decoder = av.CodecContext.create("opus", "r")
-        self.decoder.sample_rate = INPUT_RATE
+        self.decoder.sample_rate = self.device_rate
         self.decoder.layout = "mono"
         self.resampler = av.audio.resampler.AudioResampler(format="s16", layout="mono", rate=OUTPUT_RATE)
+        self.output_resampler = av.audio.resampler.AudioResampler(
+            format="s16", layout="mono", rate=self.device_rate)
         self.encoder = av.CodecContext.create("libopus", "w")
-        self.encoder.sample_rate = OUTPUT_RATE
+        self.encoder.sample_rate = self.device_rate
         self.encoder.layout = "mono"
         self.encoder.format = "s16"
+        self.encoder.options = {"frame_duration": str(self.frame_duration_ms)}
         self.packet_sink = None
         self.input_pcm = bytearray()
+        self.output_input_pcm = bytearray()
         self.output_pcm = bytearray()
+        self.next_packet_at = 0.0
 
     def decode(self, packet: bytes) -> bytes:
         decoded = bytearray()
@@ -43,8 +53,26 @@ class XiaozhiAudio:
         return bytes(decoded)
 
     async def encode_and_send(self, pcm: bytes, flush: bool = False) -> None:
-        self.output_pcm.extend(pcm)
-        frame_bytes = FRAME_SAMPLES * 2
+        self.output_input_pcm.extend(pcm)
+        input_frame_bytes = int(OUTPUT_RATE * self.frame_duration_ms / 1000) * 2
+        while len(self.output_input_pcm) >= input_frame_bytes:
+            samples = np.frombuffer(
+                self.output_input_pcm[:input_frame_bytes], dtype=np.int16).reshape(1, -1)
+            frame = av.AudioFrame.from_ndarray(samples, format="s16", layout="mono")
+            frame.sample_rate = OUTPUT_RATE
+            for resampled in self.output_resampler.resample(frame):
+                self.output_pcm.extend(resampled.to_ndarray().reshape(-1).tobytes())
+            del self.output_input_pcm[:input_frame_bytes]
+        if flush and self.output_input_pcm:
+            padded = bytes(self.output_input_pcm) + b"\x00" * (
+                input_frame_bytes - len(self.output_input_pcm))
+            samples = np.frombuffer(padded, dtype=np.int16).reshape(1, -1)
+            frame = av.AudioFrame.from_ndarray(samples, format="s16", layout="mono")
+            frame.sample_rate = OUTPUT_RATE
+            for resampled in self.output_resampler.resample(frame):
+                self.output_pcm.extend(resampled.to_ndarray().reshape(-1).tobytes())
+            self.output_input_pcm.clear()
+        frame_bytes = int(self.device_rate * self.frame_duration_ms / 1000) * 2
         while len(self.output_pcm) >= frame_bytes:
             await self._encode_frame(bytes(self.output_pcm[:frame_bytes]))
             del self.output_pcm[:frame_bytes]
@@ -56,13 +84,17 @@ class XiaozhiAudio:
     async def _encode_frame(self, pcm: bytes) -> None:
         samples = np.frombuffer(pcm, dtype=np.int16).reshape(1, -1)
         frame = av.AudioFrame.from_ndarray(samples, format="s16", layout="mono")
-        frame.sample_rate = OUTPUT_RATE
+        frame.sample_rate = self.device_rate
         for packet in self.encoder.encode(frame):
             payload = bytes(packet)
+            now = time.monotonic()
+            if self.next_packet_at > now:
+                await asyncio.sleep(self.next_packet_at - now)
             if self.packet_sink is not None:
                 await self.packet_sink(payload)
             else:
                 await self.websocket.send_bytes(payload)
+            self.next_packet_at = max(self.next_packet_at, time.monotonic()) + self.frame_duration_ms / 1000
 
 
 class XiaozhiTransport:
@@ -106,6 +138,7 @@ class XiaozhiTransport:
         elif message_type == "answer_start":
             self.reply_text = ""
             self.started_sentence = False
+            self.audio.next_packet_at = 0.0
             await self.websocket.send_json({"type": "tts", "state": "start", "session_id": self.session_id})
         elif message_type == "answer_delta":
             self.reply_text += message.get("text", "")
@@ -121,19 +154,25 @@ class XiaozhiTransport:
             self.started_sentence = True
             await self.websocket.send_json({"type": "tts", "state": "sentence_start", "text": self.reply_text, "session_id": self.session_id})
         await self.audio.encode_and_send(pcm)
+    async def send_bytes(self, pcm: bytes) -> None:
+        """Compatibilita con la sessione Realtime, che invia PCM via send_bytes."""
+        await self.send_audio(pcm)
 
 
 async def read_hello(websocket: WebSocket, session_id: str) -> dict:
     message = await websocket.receive_json()
     if message.get("type") != "hello":
         raise ValueError("Xiaozhi hello mancante")
+    audio_params = message.get("audio_params") or {}
+    device_rate = int(audio_params.get("sample_rate") or DEVICE_RATE)
     await websocket.send_json({
         "type": "hello",
         "version": 1,
         "transport": "websocket",
         "session_id": session_id,
-        "audio_params": message.get("audio_params") or {
-            "format": "opus", "sample_rate": OUTPUT_RATE, "channels": 1, "frame_duration": 60,
+        "audio_params": {
+            "format": "opus", "sample_rate": device_rate, "channels": 1,
+            "frame_duration": int(audio_params.get("frame_duration") or FRAME_DURATION_MS),
         },
     })
     return message

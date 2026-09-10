@@ -99,7 +99,8 @@ class CosyVoice3TTS:
                         from cosyvoice.cli.cosyvoice import AutoModel
                     except ImportError as exc:
                         raise RuntimeError(
-                            "CosyVoice non installato. Esegui scripts/setup_cosyvoice.sh"
+                            "Dipendenze CosyVoice non caricabili. Esegui scripts/setup_cosyvoice.sh "
+                            "e verifica la compatibilita NumPy/onnxruntime."
                         ) from exc
                     self._model = AutoModel(
                         model_dir=str(model_path),

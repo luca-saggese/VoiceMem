@@ -25,7 +25,7 @@ classifiers = [
 # In precedenza erano separati nell'extra [slm], dopo che l'utente installava il pacchetto base secondo il README ancora
 # ModuleNotFoundError: funasr —— si chiama slm, nessuno si aspetterebbe che l'ASR sia lì dentro.
 dependencies = [
-    "numpy",
+    "numpy<2",             # onnxruntime/CosyVoice e alcuni moduli audio nativi usano ancora l'ABI NumPy 1.x
     "openai[realtime]",
     # ── audio chain ──
     "torch",

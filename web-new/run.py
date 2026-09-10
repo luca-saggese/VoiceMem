@@ -3341,9 +3341,13 @@ async def xiaozhi_websocket(sock: WebSocket):
     try:
         from xiaozhi import XiaozhiAudio, XiaozhiTransport, read_hello
         session_id = uuid.uuid4().hex
-        await read_hello(sock, session_id)
+        hello = await read_hello(sock, session_id)
+        device_audio_params = hello.get("audio_params") or {}
+        device_rate = int(device_audio_params.get("sample_rate") or 16000)
+        frame_duration_ms = int(device_audio_params.get("frame_duration") or 60)
         transport = XiaozhiTransport(
-            sock, XiaozhiAudio(sock), session_id,
+            sock, XiaozhiAudio(sock, device_rate=device_rate,
+                               frame_duration_ms=frame_duration_ms), session_id,
             mqtt_gateway=sock.query_params.get("from") == "mqtt_gateway",
         )
         async def send_to_device_and_monitors(message: dict):
@@ -3366,17 +3370,33 @@ async def xiaozhi_websocket(sock: WebSocket):
 
         transport.input_sink = monitor_input_audio
 
+        class XiaozhiRealtimeSocket:
+            async def receive(self):
+                return await transport.receive()
+
+            async def send_json(self, message):
+                await transport.send_json(message)
+                await _broadcast_xiaozhi(device_id, message=message)
+
+            async def send_bytes(self, pcm):
+                await transport.send_audio(pcm)
+                await _broadcast_xiaozhi(device_id, audio=pcm)
+
         owner = {"id": "", "last": "", "miss": 0}
         speech_rate = SpeechRateEstimator()
         context_session = f"xiaozhi-{device_id}-{session_id}"
-        async for pending in _session_anticipate(context_session, transport):
-            timeline = AudioTimeline(prebuffer_seconds=0.16, rate_estimator=speech_rate)
-            await voicemem_llm_tts(
-                pending, send_to_device_and_monitors, send_audio_to_device_and_monitors, owner, timeline,
-                context_session=context_session, context_space=ACTIVE_SPACE,
-                memory_vm=vm,
-            )
-            AUTH.append_device_turn(device["id"], device_id, pending.text, transport.reply_text)
+        if MODE == "realtime":
+            print(f"[xiaozhi] mode=realtime device={device_id}; CosyVoice disabilitato", flush=True)
+            await realtime_session(XiaozhiRealtimeSocket())
+        else:
+            async for pending in _session_anticipate(context_session, transport):
+                timeline = AudioTimeline(prebuffer_seconds=0.16, rate_estimator=speech_rate)
+                await voicemem_llm_tts(
+                    pending, send_to_device_and_monitors, send_audio_to_device_and_monitors, owner, timeline,
+                    context_session=context_session, context_space=ACTIVE_SPACE,
+                    memory_vm=vm,
+                )
+                AUTH.append_device_turn(device["id"], device_id, pending.text, transport.reply_text)
     except Exception as exc:
         print(f"[xiaozhi] sessione fallita device={device_id}: {type(exc).__name__}: {exc}", flush=True)
         try:
