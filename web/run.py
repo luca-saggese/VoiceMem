@@ -1407,6 +1407,7 @@ async def voicemem_llm_tts(pending, send, send_audio, owner, timeline,
     tts = memory_vm.utils.get("tts")
     print(f"[tts] provider={type(tts).__name__} model={getattr(tts, 'model_path', '-')}",
           flush=True)
+    cosyvoice_serial = type(tts).__name__ == "CosyVoice3TTS"
     # 这一轮怎么念。情绪是逐轮变的，所以按轮传，不写在实例上。
     speak_as = _speak_instruction(pending.emotion)
 
@@ -1527,7 +1528,7 @@ async def voicemem_llm_tts(pending, send, send_audio, owner, timeline,
             buf += d
             timeline.append_text(d)
             await send({"type": "answer_delta", "text": d})
-            if _cut_point(buf, first=sent == 0):
+            if not cosyvoice_serial and _cut_point(buf, first=sent == 0):
                 segment = buf.strip()
                 leading = len(buf) - len(buf.lstrip())
                 start = len(reply) - len(buf) + leading
