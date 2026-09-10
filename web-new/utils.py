@@ -170,12 +170,12 @@ def build_app(mode, session, classify, snapshot=None, audio_of=None, spaces=None
     @app.websocket("/ws")
     async def ws(sock: WebSocket):
         await sock.accept()
-        await sock.send_json({"type": "session_ready", "mode": mode})
         reset_user = None
         set_websocket_user = getattr(app.state, "set_websocket_user", None)
         if set_websocket_user:
             reset_user = set_websocket_user(sock)
         try:
+            await sock.send_json({"type": "session_ready", "mode": mode})
             await session(sock)
         except WebSocketDisconnect:
             pass          # 关页面/刷新是正常结束，别刷一屏 traceback
@@ -206,12 +206,10 @@ def build_app(mode, session, classify, snapshot=None, audio_of=None, spaces=None
                 model=CHAT_MODEL, max_tokens=16, temperature=0,
                 messages=[
                     {"role": "system", "content":
-                     "用不超过 12 个字概括这段对话在说什么，做标题用。"
-                     "只输出标题本身，不要引号、不要标点、不要「关于」这类开头。"
-                     # 开场常是"喂喂喂""测试一下""你好"，照实概括就成了"语音测试"，
-                     # 而这段对话后面聊的可能是完全另一回事。
-                     "忽略开头的寒暄、试麦、确认能不能听见这类内容，"
-                     "抓真正聊到的事情。整段都只是打招呼时，才叫「随便聊聊」。"},
+                     "Summarize what this conversation is about in no more than 12 words for a title. "
+                     "Output only the title, without quotes, punctuation, or prefixes such as 'About'. "
+                     "Ignore opening greetings, microphone tests, and checks that the audio works. "
+                     "Capture the actual topic. If the entire conversation is only greetings, use 'Casual chat'."},
                     {"role": "user", "content": body.text[:600]},
                 ],
             )

@@ -60,7 +60,7 @@ function VoiceApp({ user, onLogout }) {
   return <main className={`app ${collapsed ? 'rail-collapsed' : ''}`}>
     <Sidebar collapsed={collapsed} onCollapse={() => setCollapsed((value) => !value)} sessions={vm.sessions} activeId={vm.sessionId} onSelect={vm.selectSession} onNew={vm.createSession} user={user} onLogout={onLogout} activeDeviceId={vm.activeDeviceId} onDeviceSelect={vm.selectDevice} />
     <CenterPanel isDeviceConversation={String(vm.sessionId).startsWith('xiaozhi:')} liveInput={vm.liveInput} reply={vm.reply} recall={vm.recall} status={vm.status} audioLevel={vm.audioLevel} onSend={vm.sendText} onStart={vm.start} onPause={vm.togglePause} />
-    <RightPane session={activeSession} memories={graphMemories} activeMemoryIds={vm.activeMemoryIds} spaces={vm.spaces} spaceId={vm.spaceId} language={language} user={user} onLogout={onLogout} onLanguageChange={changeLanguage} onDownload={download} onSpaceChange={changeSpace} onNewSpace={createSpace} />
+    <RightPane session={activeSession} memories={graphMemories} activeMemoryIds={vm.activeMemoryIds} spaces={vm.spaces} spaceId={vm.spaceId} language={language} user={user} onLogout={onLogout} onLanguageChange={changeLanguage} onDownload={download} onSpaceChange={changeSpace} onNewSpace={createSpace} onSystemPromptChange={vm.updateSystemPrompt} />
   </main>;
 }
 

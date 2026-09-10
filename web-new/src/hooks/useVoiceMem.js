@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-const emptySession = { id: 'local', title: 'Nuova conversazione', turns: [] };
+const emptySession = { id: 'local', title: 'Nuova conversazione', turns: [], system_prompt: '' };
 const SAMPLE_RATE = 24000;
 
 export function useVoiceMem() {
@@ -46,7 +46,7 @@ export function useVoiceMem() {
       .then((data) => {
         if (cancelled) return;
         const loaded = Array.isArray(data?.sessions) ? data.sessions : [];
-        setSessions(loaded.length ? loaded : [emptySession]);
+        setSessions(loaded.length ? loaded.map((session) => ({ ...session, system_prompt: session.system_prompt || '' })) : [emptySession]);
         setSessionId(loaded[0]?.id || emptySession.id);
         sessionsLoaded.current = true;
       })
@@ -225,8 +225,8 @@ export function useVoiceMem() {
       await ensurePlayback();
       const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
       const endpoint = device
-        ? `/ws/device?device=${encodeURIComponent(device.device_id)}&space=${encodeURIComponent(spaceId)}`
-        : `/ws?space=${encodeURIComponent(spaceId)}`;
+        ? `/ws/device?device=${encodeURIComponent(device.device_id)}&space=${encodeURIComponent(spaceId)}&session_id=${encodeURIComponent(sessionIdRef.current)}`
+        : `/ws?space=${encodeURIComponent(spaceId)}&session_id=${encodeURIComponent(sessionIdRef.current)}`;
       const connection = new WebSocket(`${protocol}://${location.host}${endpoint}`);
       connection.binaryType = 'arraybuffer';
       socket.current = connection;
@@ -313,7 +313,7 @@ export function useVoiceMem() {
     const deviceSessionId = `xiaozhi:${device.device_id}`;
     setSessions((current) => current.some((session) => session.id === deviceSessionId)
       ? current
-      : [...current, { id: deviceSessionId, title: `Device ${device.name}`, turns: [] }]);
+      : [...current, { id: deviceSessionId, title: `Device ${device.name}`, turns: [], system_prompt: '' }]);
     setSessionId(deviceSessionId);
     setLiveInput('');
     setReply('Nessuna risposta ancora.');
@@ -343,11 +343,17 @@ export function useVoiceMem() {
   const createSession = useCallback(() => {
     const id = `session-${Date.now()}`;
     if (live || socket.current) close();
-    setSessions((current) => [...current, { id, title: 'Nuova conversazione', turns: [] }]);
+    setSessions((current) => [...current, { id, title: 'Nuova conversazione', turns: [], system_prompt: '' }]);
     setSessionId(id);
     setLiveInput('');
     setReply('Nessuna risposta ancora.');
   }, [close, live]);
 
-  return { spaces, spaceId, setSpaceId, sessions, sessionId, setSessionId, selectSession, liveInput, reply, recall, status, live, paused, audioLevel, activeMemoryIds, activeDeviceId, sendText, start, selectDevice, togglePause, createSession, loadMemories };
+  const updateSystemPrompt = useCallback((prompt) => {
+    setSessions((current) => current.map((session) => session.id === sessionIdRef.current
+      ? { ...session, system_prompt: prompt }
+      : session));
+  }, []);
+
+  return { spaces, spaceId, setSpaceId, sessions, sessionId, selectSession, liveInput, reply, recall, status, live, paused, audioLevel, activeMemoryIds, activeDeviceId, sendText, start, selectDevice, togglePause, createSession, updateSystemPrompt, loadMemories };
 }

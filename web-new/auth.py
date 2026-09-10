@@ -68,6 +68,7 @@ class AuthService:
                     user_id INTEGER NOT NULL,
                     title TEXT NOT NULL DEFAULT 'Nuova conversazione',
                     turns_json TEXT NOT NULL DEFAULT '[]',
+                    system_prompt TEXT NOT NULL DEFAULT '',
                     updated_at TEXT NOT NULL,
                     PRIMARY KEY(id, user_id),
                     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -83,6 +84,9 @@ class AuthService:
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_device_id ON devices(device_id);
             """)
+            columns = {row[1] for row in db.execute("PRAGMA table_info(chat_sessions)").fetchall()}
+            if "system_prompt" not in columns:
+                db.execute("ALTER TABLE chat_sessions ADD COLUMN system_prompt TEXT NOT NULL DEFAULT ''")
 
     @staticmethod
     def _now() -> datetime:
@@ -229,15 +233,24 @@ class AuthService:
     def list_chat_sessions(self, request: Request) -> list[dict]:
         user_id = self._user_id_from_request(request)
         with self._connect() as db:
-            rows = db.execute("SELECT id,title,turns_json FROM chat_sessions WHERE user_id=? ORDER BY updated_at DESC", (user_id,)).fetchall()
+            rows = db.execute("SELECT id,title,turns_json,system_prompt FROM chat_sessions WHERE user_id=? ORDER BY updated_at DESC", (user_id,)).fetchall()
         result = []
         for row in rows:
             try:
                 turns = json.loads(row["turns_json"])
             except (TypeError, ValueError):
                 turns = []
-            result.append({"id": row["id"], "title": row["title"], "turns": turns if isinstance(turns, list) else []})
+            result.append({"id": row["id"], "title": row["title"], "turns": turns if isinstance(turns, list) else [], "system_prompt": row["system_prompt"] or ""})
         return result
+
+    def chat_session_prompt(self, user_id: int, session_id: str) -> str:
+        """Restituisce il prompt solo se la sessione appartiene all'utente."""
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT system_prompt FROM chat_sessions WHERE id=? AND user_id=?",
+                (str(session_id).strip(), user_id),
+            ).fetchone()
+        return str(row["system_prompt"] or "")[:12000] if row else ""
 
     def append_device_turn(self, user_id: int, device_id: str, user_text: str, reply_text: str) -> None:
         """Aggiorna la singola conversazione persistente assegnata al device."""
@@ -265,13 +278,14 @@ class AuthService:
         if not session_id or len(session_id) > 120:
             raise HTTPException(400, "ID sessione non valido")
         title = str(session.get("title", "Nuova conversazione"))[:200]
+        system_prompt = str(session.get("system_prompt", ""))[:12000]
         turns = session.get("turns", [])
         if not isinstance(turns, list) or len(turns) > 500:
             raise HTTPException(400, "Sessione non valida")
         payload = json.dumps(turns, ensure_ascii=False)
         with self._connect() as db:
-            db.execute("INSERT INTO chat_sessions(id,user_id,title,turns_json,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(id,user_id) DO UPDATE SET title=excluded.title,turns_json=excluded.turns_json,updated_at=excluded.updated_at", (session_id, user_id, title, payload, self._stamp(self._now())))
-        return {"id": session_id, "title": title, "turns": turns}
+            db.execute("INSERT INTO chat_sessions(id,user_id,title,turns_json,system_prompt,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id,user_id) DO UPDATE SET title=excluded.title,turns_json=excluded.turns_json,system_prompt=excluded.system_prompt,updated_at=excluded.updated_at", (session_id, user_id, title, payload, system_prompt, self._stamp(self._now())))
+        return {"id": session_id, "title": title, "turns": turns, "system_prompt": system_prompt}
 
     def delete_chat_session(self, request: Request, session_id: str) -> None:
         user_id = self._user_id_from_request(request)

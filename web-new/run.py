@@ -159,55 +159,27 @@ SPEC_MIN_CHARS = ARGS.spec_min_chars                 # Avvia prefetch speculativ
 GAMBLE_S  = ARGS.gamble_ms / 1000                    # Scommetti che hai finito
 CONFIRM_S = ARGS.confirm_ms / 1000                   # VAD conferma fine turno
 
-_RT_PERSONA = (
-    # Chiarisci apertamente "perché esisti". La personalità predefinita dell'assistant è molto dominante, senza specificare
-    # una diversa ragione di esistere, tornerà a "Ciao, come posso aiutarti?".
-    "你是这个用户长期在用的语音助手，你们认识很久了。你的价值在于**你记得他**——"
-    "你说的每句话，都应该是一个没有记忆的助手说不出来的。\n"
-    "\n"
-    "【两种记忆，用法完全不同】\n"
-    "factual memory 是事实，可以直接提，就像你本来就记得"
-    "（「Annie 那事你还好吗」，不是「根据记录，Annie 要转学」）。\n"
-    "emotion & characteristics 是他这个人的性格和情绪归因，**只**影响你的语气、"
-    "先说什么、什么别碰——一个字都不许说出来。\n"
-    "\n"
-    # 检索按相关度排，但排在前面不等于跟这句话有关。不说清楚模型会硬凑，
-    # 听起来就是答非所问或者莫名其妙翻旧账。
-    "【检索到 ≠ 相关】\n"
-    "这些记忆是检索出来的，不一定都跟他这句话有关。挑真正有关的用，其余的知道就好。"
-    "一条都不相关时，就顺着他这句话往下说，不用勉强提起任何记忆。\n"
-    "\n"
-    # 最贵的一条。没有它模型会编：记忆里只有「下周要考 GRE」，它张口就是
-    # 「数学一直是你的强项吧」——听着像真记得，其实是幻觉，比不记得更糟。
-    "【只说记忆里真有的事】\n"
-    "没写的细节——分数、科目、他做过什么、谁说过什么、哪一天——一个字都不许补；"
-    "记忆里没带日期就别提时间。宁可说得少，也不要编。不知道就直说不知道。\n"
-    "\n"
-    # 产品感的核心：主动性。这一段是"作为产品"和"作为 demo"最大的分野。
-    "【主动，别把活儿推给他】\n"
-    "× 「有什么想聊的吗」「有什么可以帮你的吗」「今天过得怎么样」——"
-    "这些话没有记忆也说得出来，等于当面告诉他你什么都不记得。\n"
-    "√ 直接落到具体的事：「明天那个会，准备得怎么样了」。\n"
-    "他说得含糊时（「最近压力好大」「今天好累」），别泛泛安慰、也别只是问「怎么了」。"
-    "从记忆里挑出最可能是原因的那件具体的事，说出来问他是不是。猜错他会纠正你。\n"
-    "一轮最多问一个问题，而且要具体。没什么可问的就别问，说完就停——"
-    "每句都拿问号结尾是在审问，不是聊天。\n"
-    "\n"
-    # 没有这一段，"ok ok" 会被当成一轮全新对话，模型重新打招呼。
-    "【顺着对话走】\n"
-    "「ok」「好的」「嗯嗯」「行」这类是收尾或者认可，**不是新话题**。"
-    "简短接一句就行，绝对不要重新打招呼、不要重启话题、不要重新自我介绍。\n"
-    "刚才聊到哪儿了，看下面「刚才的对话」那一段。\n"
-    "\n"
-    "【说他是什么样的人】\n"
-    "每个判断后面紧跟那件让你这么想的事，别堆形容词——"
-    "「你特别有追求」这种话空模型也说得出来。\n"
-    "\n"
-    "【怎么说话】\n"
-    "你是在**说话**，不是在写字。短句，一次说一两句就停。"
-    "别复述他刚说的话，别用「我记得你说过」开头，别念清单，"
-    "也别用「作为你的助手」这类自我介绍——你们早就认识了。"
+_RT_INSTRUCTIONS = (
+    "You are a voice assistant with access to the user's memories. Follow these rules.\n\n"
+    "Use factual memories naturally, as if you genuinely remember them. Never mention retrieval, records, or memory systems.\n"
+    "Memories are ranked by relevance but may not relate to the current message. Use only memories that truly apply; do not force references.\n"
+    "Only state details explicitly present in the supplied memories. Never invent names, dates, places, scores, events, preferences, or causes. If you do not know, say so plainly.\n"
+    "Use emotional and personality memories only to guide tone, priorities, and what to avoid. Never reveal those inferences or labels.\n"
+    "Be proactive and specific when relevant. Avoid generic openings such as 'How can I help?' or 'How was your day?'. Ask at most one concrete question per turn.\n"
+    "Treat short acknowledgements such as 'okay', 'yes', or 'mm-hm' as continuation or closure, not as a new conversation. Do not restart, re-introduce yourself, or change topic.\n"
+    "Speak in short, natural sentences. Usually say one or two sentences and stop. Do not repeat the user's words, recite lists, or introduce yourself as an assistant."
 )
+
+# This is the default editable personality. A session prompt replaces it while
+# the operational rules above remain in force.
+_DEFAULT_SESSION_PROMPT = (
+    "You are the user's long-term voice companion. You know each other well, and your value is remembering what matters to the user. "
+    "Be warm, direct, and conversational."
+)
+
+
+def _session_persona(session_prompt: str = "") -> str:
+    return (session_prompt or "").strip() or _DEFAULT_SESSION_PROMPT
 
 
 
@@ -227,9 +199,9 @@ _RT_PERSONA = (
 #     → 为某个 demo 问题定制的。上面"每个判断紧跟依据"那条已经覆盖了大半。
 
 
-_STRANGER = ("说话的不是你认识的那个人——声纹对不上。你对他没有任何记忆。"
-             "别把别人的事讲给他听，也别猜他是谁。就当第一次见面，"
-             "友好但如实地说你还不认识他。")
+_STRANGER = ("The speaker does not match the person you know. You have no memories of this person. "
+             "Do not reveal someone else's information or guess who they are. Treat this as a first meeting and say, "
+             "in a friendly and honest way, that you do not know them yet.")
 
 #: 这一轮一条记忆都没检索到时追加的一句。
 #:
@@ -313,12 +285,8 @@ def _lang_note() -> str:
 
 
 _NO_MEMORY_NOTE = (
-    "这一轮你没有检索到任何相关记忆。所以：**不要提任何具体的事**——"
-    "食物、地点、人名、日期、他做过什么、他喜欢什么，一个都不许说，"
-    "更不能说「你之前提到过」「我记得你说过」。"
-    "如实说这件事你还不知道，然后问他，或者就着他这句话本身聊。"
-    "宁可显得记性不好，也不要编——编出来的东西他一眼就看得穿，"
-    "而且会让他不再相信你真记得的那些。"
+    "No relevant memory was retrieved for this turn. Do not mention any specific food, place, person, date, event, or preference, "
+    "and do not say that the user mentioned it before or that you remember it. Say honestly that you do not know this yet, then ask a question or continue from the user's words. Never invent details."
 )
 
 
@@ -855,18 +823,14 @@ def _turn_detection() -> dict:
 
 #: 要回放时追加的一句。不加的话模型会去"描述"那段音频（"你说那是一首很轻快的
 #: 钢琴曲…"）——它根本没听过那段音频，描述全是编的；而且用户马上就要亲耳听到。
-_REPLAY_NOTE = ("你手上有他当时那段录音，说完这句就会放给他听。"
-                "所以别去描述那段声音是什么样的——你没听过，别编。"
-                "就短短一句把它引出来，像「我把当时那段找出来了，你听听是不是这个」，"
-                "然后停住，等他听。")
+_REPLAY_NOTE = ("You have the recording from that moment and it will be played after you speak. "
+                "Do not describe the recording because you have not heard it and must not invent details. Introduce it in one short sentence, then stop and let the user listen.")
 
 #: 他在找一段声音、但那个时间段确实没有存档时追加的一句。
 #: 不加的话模型会顺口答"当然，马上播放"——然后什么都不放。说要播却没播，
 #: 比直接说没找到糟得多。
-_NO_REPLAY_NOTE = ("他在找一段录音，但你手上**没有**他说的那个时间的录音，"
-                   "这一轮不会播任何东西。所以别说「马上播放」「这就放给你听」。"
-                   "直说那个时候没有存到，再问一句是不是别的时候，"
-                   "或者说说你记得的相关的事。")
+_NO_REPLAY_NOTE = ("The user is looking for a recording, but no recording exists for the time they named and nothing will be played this turn. "
+                   "Do not promise playback. Say plainly that it was not saved, then ask whether they mean another time or discuss related memories you do have.")
 
 
 def _wants_sound(text: str) -> bool:
@@ -950,16 +914,16 @@ def _finish_history_turn(turn_id: str, result: dict) -> None:
 def _realtime_instructions(memory_context: str, stranger: bool = False,
                            replay: bool = False, emotion: str = "",
                            text: str = "", context_session: str = "",
-                           context_space: str = "") -> str:
+                           context_space: str = "", session_prompt: str = "") -> str:
     """人设 + 这一轮检索到的记忆。要说清楚这是「你记得的事」，否则模型会把它当成
     背景资料念出来，而不是当成自己对这个用户的记忆自然地用。
 
     ``text``：用户这一轮说的话。只用来判断"他是不是在找一段录音而我们没找到"——
     那种情况要明说没找到，否则模型会顺口答"马上播放"然后什么都不放。"""
     if stranger:
-        out = f"{_RT_PERSONA}\n\n{_STRANGER}"
+        out = f"{_RT_INSTRUCTIONS}\n\n{_session_persona(session_prompt)}\n\n{_STRANGER}"
         return f"{out}\n\n{_lang_note()}" if _lang_note() else out
-    parts = [_RT_PERSONA]
+    parts = [_RT_INSTRUCTIONS, _session_persona(session_prompt)]
     if memory_context:
         parts.append(memory_context)
     else:
@@ -994,7 +958,7 @@ CONFIG = {
     # reply：回复用模型（核心不管，web 读）。默认全走 OpenAI api。
     "reply": {
         "llm":      {"provider": "openai", "config": {"model": utils.CHAT_MODEL,
-                                                      "system": _RT_PERSONA}},
+                                                      "system": _RT_INSTRUCTIONS}},
         "tts":      {"provider": "cosyvoice3", "config": {
             "model": os.environ.get("VOICEMEM_COSYVOICE_MODEL", "models/tts/Fun-CosyVoice3-0.5B-2512"),
             "ref_audio": os.environ.get(
@@ -1416,7 +1380,7 @@ def fill_tags(payload: dict, text: str, audio_path: str = "",
 
 async def voicemem_llm_tts(pending, send, send_audio, owner, timeline,
                            said=None, context_session="", context_space="",
-                           memory_vm=None):
+                           memory_vm=None, session_prompt=""):
     """记忆已在关键路径外预取好：LLM 流式回复 → TTS 流式语音。
 
     TTS 跟生成**并行**：LLM 吐满一句就丢进队列，另一条协程取出来合成、发音频。
@@ -1557,6 +1521,8 @@ async def voicemem_llm_tts(pending, send, send_audio, owner, timeline,
         # 走核心回复层（人设在 CONFIG.reply.llm.config.system，见 voicemem/reply.py
         # 的 compose_system：system + memory_context，和 realtime 那条拼出来的一样）。
         ctx = _STRANGER if pending.stranger else pending.memory_context
+        persona = _session_persona(session_prompt)
+        ctx = f"{persona}\n\n{ctx}" if ctx else persona
         if not pending.stranger and not (ctx or "").strip():
             ctx = _NO_MEMORY_NOTE          # 一条都没检索到：明说不知道，别编
         # 情绪不再拼进文本 prompt：那是**发声指示**（"压低、放软、留停顿"），
@@ -1651,7 +1617,7 @@ async def voicemem_llm_tts(pending, send, send_audio, owner, timeline,
 
 
 async def start_realtime_turn(pending, conn, send, timeline,
-                              context_session="", context_space=""):
+                              context_session="", context_space="", session_prompt=""):
     """把预取好的记忆注入 Realtime session，触发这一轮的原生语音。
 
     只负责"发起"；收音频/文本和收尾都在常驻的事件泵里（见 realtime_session）——
@@ -1685,7 +1651,8 @@ async def start_realtime_turn(pending, conn, send, timeline,
                                                emotion=pending.emotion,
                                                text=pending.text,
                                                context_session=context_session,
-                                               context_space=context_space),
+                                               context_space=context_space,
+                                               session_prompt=session_prompt),
     })
     await send({"type": "answer_start", "output_id": timeline.output_id,
                 "sample_rate": timeline.sample_rate})
@@ -2181,6 +2148,21 @@ async def _session_anticipate(session_id: str, sock, on_close=None, **kwargs):
         _SESSION_CONTEXT.clear_session(session_id)
 
 
+def _session_prompt_for(user_id, session_id: str) -> str:
+    try:
+        numeric_user_id = int(user_id)
+    except (TypeError, ValueError):
+        return ""
+    if not session_id:
+        return ""
+    return AUTH.chat_session_prompt(numeric_user_id, session_id)
+
+
+def _socket_session_prompt(sock) -> str:
+    return _session_prompt_for(
+        _CURRENT_USER_ID.get(), sock.query_params.get("session_id", ""))
+
+
 async def llm_tts_session(sock):
     """llm_tts 这条路的打断。
 
@@ -2193,6 +2175,7 @@ async def llm_tts_session(sock):
 
     现在回复丢进后台任务，读 socket 的循环一刻不停；听到人声就取消那个任务。
     """
+    session_prompt = _socket_session_prompt(sock)
     # until：前端预计几点才把已发出去的音频播完（见 hearing()）。
     turn = {"task": None, "t0": 0.0, "until": 0.0,
             "reply": {"text": ""}, "timeline": None}
@@ -2333,12 +2316,14 @@ async def llm_tts_session(sock):
 
         async def run_reply(pending=pending, timeline=timeline,
                             context_space=context_space, memory_vm=memory_vm,
-                            reply_state=reply_state):
+                            reply_state=reply_state,
+                            session_prompt=session_prompt):
             try:
                 await voicemem_llm_tts(
                     pending, sock.send_json, send_audio, owner, timeline,
                     said=reply_state, context_session=context_session,
-                    context_space=context_space, memory_vm=memory_vm)
+                    context_space=context_space, memory_vm=memory_vm,
+                    session_prompt=session_prompt)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -2379,10 +2364,11 @@ async def llm_tts_session(sock):
         task.add_done_callback(reply_done)
 
 
-async def realtime_session(sock):
+async def realtime_session(sock, session_prompt=None):
     """方案 A：整段麦克风音频平行喂给 OpenAI Realtime；本地 ASR+VAD 只负责投机记忆 +
     用 500ms 判回合（关掉 OpenAI 自带 server_vad）。"""
     connected = False
+    session_prompt = _socket_session_prompt(sock) if session_prompt is None else session_prompt
     context_session = uuid.uuid4().hex
     try:
         async with utils.realtime_connect(REPLY) as conn:
@@ -2720,7 +2706,8 @@ async def realtime_session(sock):
                         await start_realtime_turn(
                             pending, conn, sock.send_json, timeline,
                             context_session=context_session,
-                            context_space=context_space)
+                            context_space=context_space,
+                            session_prompt=session_prompt)
                     except Exception:
                         response_idle.set()
                         raise
@@ -3385,16 +3372,17 @@ async def xiaozhi_websocket(sock: WebSocket):
         owner = {"id": "", "last": "", "miss": 0}
         speech_rate = SpeechRateEstimator()
         context_session = f"xiaozhi-{device_id}-{session_id}"
+        session_prompt = _session_prompt_for(device["id"], f"xiaozhi:{device_id}")
         if MODE == "realtime":
             print(f"[xiaozhi] mode=realtime device={device_id}; CosyVoice disabilitato", flush=True)
-            await realtime_session(XiaozhiRealtimeSocket())
+            await realtime_session(XiaozhiRealtimeSocket(), session_prompt=session_prompt)
         else:
             async for pending in _session_anticipate(context_session, transport):
                 timeline = AudioTimeline(prebuffer_seconds=0.16, rate_estimator=speech_rate)
                 await voicemem_llm_tts(
                     pending, send_to_device_and_monitors, send_audio_to_device_and_monitors, owner, timeline,
                     context_session=context_session, context_space=ACTIVE_SPACE,
-                    memory_vm=vm,
+                    memory_vm=vm, session_prompt=session_prompt,
                 )
                 AUTH.append_device_turn(device["id"], device_id, pending.text, transport.reply_text)
     except Exception as exc:
