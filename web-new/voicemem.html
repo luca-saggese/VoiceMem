@@ -1,0 +1,2228 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>VoiceMem</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   VoiceMem —— nero/grigio (allineamento ChatGPT). Blu cervello sinistro / rosa cervello destro sono gli unici due colori.
+   ══════════════════════════════════════════════════════════════════════ */
+:root{
+  --bg:#212121; --bg-side:#181818; --bg-panel:#1c1c1c; --bg-input:#2b2b2b;
+  --bg-hover:rgba(255,255,255,.055); --bg-active:rgba(255,255,255,.09);
+  --bg-dark:#080808;
+  --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.17);
+  --txt:#ececec; --txt-2:#a8a8a8; --txt-3:#7c7c7c;
+  --blue:#6ba7f0; --rose:#ef7bab; --mint:#79d7a2;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",
+         "PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--sans);
+  font-size:14px;line-height:1.5;overflow:hidden;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:none}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:99px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.24)}
+::-webkit-scrollbar-track{background:transparent}
+:focus-visible{outline:2px solid #8ab4f8;outline-offset:2px;border-radius:6px}
+
+/* Quando la sidebar è collassata, la colonna centrale mantiene la larghezza e la mappa cerebrale si dimensiona in altezza — lo schermo intero si sposta solo orizzontalmente, senza riordinamento.
+   Solo quando la finestra non riesce proprio a contenere, le due colonne scendono al minimo di minmax. */
+#app{
+  position:fixed;inset:0;display:grid;
+  grid-template-columns:264px minmax(340px,420px) minmax(380px,1fr);
+  transition:grid-template-columns .3s cubic-bezier(.2,.8,.2,1);
+}
+#app.collapsed{grid-template-columns:56px minmax(340px,420px) minmax(380px,1fr)}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────── */
+.sidebar{display:flex;flex-direction:column;min-width:0;background:var(--bg-side);
+  border-right:1px solid var(--line)}
+#app.collapsed .sidebar{background:transparent;border-right:none}
+#app.collapsed .side-scroll,#app.collapsed .side-search,#app.collapsed .side-foot{display:none}
+#app.collapsed .side-head{flex-direction:column;gap:4px;padding:10px 0}
+#app.collapsed .side-head .grow{display:none}
+.side-head{display:flex;align-items:center;gap:4px;padding:10px 8px}
+.side-head .grow{flex:1}
+.ico{width:34px;height:34px;flex:0 0 34px;border-radius:8px;display:flex;
+  align-items:center;justify-content:center;color:var(--txt-2);transition:background .15s,color .15s}
+.ico:hover{background:var(--bg-hover);color:var(--txt)}
+.ico svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+.side-search{padding:0 10px 8px;display:none}
+.side-search.open{display:block}
+.side-search input{width:100%;padding:7px 11px;border-radius:9px;border:1px solid var(--line);
+  background:var(--bg-input);color:var(--txt);font-size:13px}
+.side-search input::placeholder{color:var(--txt-3)}
+.side-search input:focus{outline:none;border-color:var(--line-2)}
+.side-scroll{flex:1;overflow-y:auto;padding:0 8px 14px}
+.side-label{display:flex;align-items:center;gap:6px;padding:10px 10px 6px;
+  font-size:11.5px;color:var(--txt-3)}
+.side-label .c{margin-left:auto;font-variant-numeric:tabular-nums}
+
+.sess{list-style:none;margin:0;padding:0}
+.sess li{display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:2px;
+  border-radius:9px;cursor:pointer;font-size:13.5px;color:var(--txt-2);
+  transition:background .14s,color .14s}
+.sess li:hover{background:var(--bg-hover);color:var(--txt)}
+.sess li.on{background:var(--bg-active);color:var(--txt)}
+.sess .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sess .n{flex:0 0 auto;font-size:11px;color:var(--txt-3);font-variant-numeric:tabular-nums}
+.sess .sp{flex:0 0 auto;font-size:10.5px;color:var(--txt-3);border:1px solid var(--line);
+  border-radius:99px;padding:1px 7px;max-width:88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sess li.on .sp{color:var(--txt-2);border-color:var(--line-2)}
+.side-empty{padding:12px 10px;font-size:12.5px;color:var(--txt-3);line-height:1.7}
+.side-foot{padding:10px 14px;border-top:1px solid var(--line);font-size:11.5px;
+  letter-spacing:.14em;color:var(--txt-3)}
+
+/* ── Colonna centrale ─────────────────────────────────────────────────────────── */
+.center{display:flex;flex-direction:column;gap:10px;min-width:0;min-height:0;padding:14px}
+#orb{display:block;flex:0 1 26%;height:26%;min-height:0;width:auto;aspect-ratio:1/1;
+  margin:0 auto;opacity:.75;pointer-events:none;border-radius:50%}
+.panel{border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-panel);
+  padding:12px 14px;display:flex;flex-direction:column;min-height:0}
+.panel-h{flex:0 0 auto;display:flex;align-items:center;gap:8px;margin-bottom:9px;
+  font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--txt-3)}
+.panel-h::after{content:"";flex:1;height:1px;background:var(--line)}
+
+.p-in{flex:0 0 auto}
+.spk{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.spk .av{width:22px;height:22px;flex:0 0 22px;border-radius:50%;display:flex;
+  align-items:center;justify-content:center;font-size:11px;color:#141414;background:var(--blue)}
+.spk .nm{font-size:12.5px;color:var(--txt)}
+.spk .id{font-size:11px;color:var(--txt-3);padding:2px 8px;border:1px solid var(--line);border-radius:99px}
+.spk .lv{margin-left:auto;display:flex;gap:2px;align-items:flex-end;height:14px}
+.spk .lv i{width:2px;background:var(--txt-3);border-radius:1px;height:4px;transition:height .11s}
+.spk.live .lv i{background:var(--blue)}
+.live-text{font-size:15px;line-height:1.5;color:var(--txt);min-height:23px;word-break:break-word}
+.live-text.idle{color:var(--txt-3)}
+.textin{width:100%;margin-top:10px;padding:9px 12px;border-radius:10px;border:1px solid var(--line);
+  background:var(--bg-input);color:var(--txt);font-size:13.5px}
+.textin::placeholder{color:var(--txt-3)}
+.textin:focus{outline:none;border-color:var(--line-2)}
+.tags{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.tag{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;padding:3px 10px;
+  border-radius:99px;border:1px solid var(--line);color:var(--txt-2);white-space:nowrap}
+.tag b{font-weight:400;color:var(--txt-3);font-size:10.5px;letter-spacing:.06em}
+.tag.off{color:var(--txt-3);border-style:dashed}
+.tag.emo:not(.off){border-color:rgba(239,123,171,.42);color:#f2a3c5}
+.tag.ent:not(.off){border-color:rgba(107,167,240,.42);color:#a5cbf7}
+.tag.sch:not(.off){border-color:rgba(121,215,162,.42);color:#a2e3bf}
+
+.p-recall{flex:0 1 auto;max-height:32%}
+.recall-cols{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.rc{display:flex;flex-direction:column;min-height:0}
+.rc-h{flex:0 0 auto;font-size:10.5px;letter-spacing:.1em;margin-bottom:6px;color:var(--txt-3)}
+.rc.l .rc-h{color:var(--blue)} .rc.r .rc-h{color:var(--rose)}
+.rc ul{list-style:none;margin:0;padding:0;overflow:auto;flex:1;min-height:0}
+.rc li{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;color:var(--txt-2);
+  padding:6px 0;border-bottom:1px solid var(--line);line-height:1.35}
+.rc li:last-child{border-bottom:none}
+.rc .sc{flex:0 0 auto;color:var(--txt-3);font-variant-numeric:tabular-nums;font-size:11px}
+.rc .none{font-size:12.5px;color:var(--txt-3);padding:6px 0}
+
+.p-out{flex:1 1 auto;min-height:150px}
+.reply{flex:1;min-height:38px;overflow:auto;font-size:15px;line-height:1.6;
+  color:var(--txt);white-space:pre-wrap}
+.reply.idle{color:var(--txt-3)}
+.out-foot{flex:0 0 auto;display:flex;align-items:center;gap:10px;margin-top:11px;
+  padding-top:10px;border-top:1px solid var(--line)}
+.voice{display:flex;align-items:center;gap:9px;height:28px;min-width:0}
+.voice .lab{font-size:11px;color:var(--txt-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.voice #wave{display:none;width:96px;height:24px}
+.voice.ai #wave{display:block} .voice.ai .lab{color:var(--mint)} .voice.user .lab{color:var(--blue)}
+.ear{position:relative;width:20px;height:20px;flex:0 0 20px;display:none}
+.voice.user .ear{display:block}
+.ear .ring{position:absolute;inset:0;border:1px solid rgba(107,167,240,.5);border-radius:50%;
+  animation:earpulse 1.6s ease-out infinite}
+@keyframes earpulse{0%{transform:scale(.55);opacity:.85}100%{transform:scale(1.5);opacity:0}}
+.btns{margin-left:auto;display:flex;gap:8px;flex:0 0 auto}
+.btn{padding:7px 15px;border-radius:99px;font-size:13px;border:1px solid var(--line-2);
+  color:var(--txt);transition:background .15s,border-color .15s,color .15s,opacity .15s}
+.btn:hover{background:var(--bg-hover)}
+.btn.primary{background:#ececec;color:#141414;border-color:#ececec}
+.btn.primary:hover{background:#fff;border-color:#fff}
+.btn.live{border-color:rgba(239,123,171,.55);color:#f2a3c5}
+.btn.sm{padding:5px 11px;font-size:12px}
+.btn.on{border-color:rgba(121,215,162,.5);color:#a2e3bf}
+.btn[disabled]{opacity:.35;cursor:default}
+.btn[disabled]:hover{background:none}
+
+/* ── Colonna destra ─────────────────────────────────────────────────────────── */
+.rightpane{display:flex;flex-direction:column;min-width:0;min-height:0;border-left:1px solid var(--line)}
+.topbar{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:11px 14px;
+  border-bottom:1px solid var(--line)}
+.seg{position:relative;display:flex;padding:3px;border-radius:99px;background:#171717;
+  border:1px solid var(--line)}
+.seg-thumb{position:absolute;top:3px;left:3px;bottom:3px;width:calc(50% - 3px);border-radius:99px;
+  background:#3a3a3a;transition:transform .3s cubic-bezier(.2,.8,.2,1)}
+.seg.mem .seg-thumb{transform:translateX(100%)}
+.seg button{position:relative;z-index:1;flex:1 0 auto;min-width:102px;padding:5px 14px;
+  border-radius:99px;font-size:12.5px;color:var(--txt-3);transition:color .2s}
+.seg button.on{color:var(--txt)}
+.export{margin-left:auto;display:flex;gap:8px;align-items:center}
+.sel{appearance:none;padding:6px 30px 6px 11px;border-radius:9px;border:1px solid var(--line);
+  background:var(--bg-input) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23a8a8a8' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>") no-repeat right 10px center;
+  font-size:12.5px;color:var(--txt)}
+.sel:focus{outline:none;border-color:var(--line-2)}
+
+.viewport{flex:1;min-height:0;overflow:hidden}
+.track{display:flex;width:200%;height:100%;transition:transform .34s cubic-bezier(.2,.8,.2,1)}
+.track.mem{transform:translateX(-50%)}
+.pane{width:50%;flex:0 0 50%;min-width:0;height:100%;display:flex;flex-direction:column;overflow:hidden}
+
+.chat-head{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:10px 22px;
+  border-bottom:1px solid var(--line)}
+.chat-head .ttl{font-size:13.5px;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;font-size:11.5px;
+  padding:3px 10px;border-radius:99px;border:1px solid var(--line);color:var(--txt-2)}
+.pill svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:1.6}
+.pill.space{border-color:rgba(107,167,240,.4);color:#a5cbf7}
+.chat{flex:1;overflow:auto;padding:20px 22px;display:flex;flex-direction:column;gap:16px}
+.chat .turn{max-width:78%;display:flex;flex-direction:column;gap:5px}
+.chat .turn.user{align-self:flex-end;align-items:flex-end}
+.chat .turn.ai{align-self:flex-start;align-items:flex-start}
+.chat .who{font-size:11px;color:var(--txt-3);padding:0 4px}
+.chat .said{font-size:14.5px;line-height:1.65;white-space:pre-wrap;word-break:break-word}
+.chat .turn.user .said{background:#303030;padding:10px 15px;border-radius:18px;border-bottom-right-radius:6px}
+.chat .turn.ai .said{color:var(--txt)}
+.chat .turn.ai.streaming .said::after{content:'';display:inline-block;width:2px;height:1em;
+  margin-left:4px;vertical-align:-2px;border-radius:1px;background:var(--blue);
+  animation:stream-caret .8s steps(1,end) infinite}
+@keyframes stream-caret{50%{opacity:.18}}
+.chat .empty{margin:auto;text-align:center;color:var(--txt-3);font-size:13.5px;line-height:1.9}
+.chat .empty b{display:block;font-weight:500;font-size:15px;color:var(--txt-2);margin-bottom:4px}
+
+.brainwrap{position:relative;flex:1;min-height:0;overflow:hidden;background:var(--bg-dark)}
+#brain{position:absolute;left:0;top:0;mix-blend-mode:screen;opacity:0;
+  transition:opacity 1s ease .1s;pointer-events:none;user-select:none;
+  filter:brightness(.66) contrast(1.35)}
+#brain.in{opacity:1}
+#fx{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.legend{position:absolute;left:16px;bottom:14px;z-index:4;display:flex;gap:14px;
+  font-size:11px;color:var(--txt-3);pointer-events:none}
+.legend i{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:6px;vertical-align:1px}
+.brain-space{position:absolute;right:16px;top:14px;z-index:4;pointer-events:none}
+
+#card{position:absolute;left:0;top:0;width:224px;z-index:5;border-radius:10px;
+  border:1px solid var(--line-2);background:rgba(24,24,24,.96);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:11px 12px 10px;
+  opacity:0;transform:translate3d(-999px,-999px,0);transition:opacity .18s;pointer-events:none;
+  box-shadow:0 18px 44px -20px rgba(0,0,0,.95)}
+#card.on{opacity:1}
+#card .eb{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+#card .sw{width:7px;height:7px;border-radius:2px;border:1.4px solid #fff;flex:0 0 7px}
+#card .kd{font-size:10.5px;letter-spacing:.08em;color:var(--txt)}
+#card .id{margin-left:auto;font-size:10px;color:var(--txt-3)}
+#card .cbody{font-size:12.5px;line-height:1.5;color:var(--txt-2);margin-bottom:9px;
+  max-height:112px;overflow:auto;word-break:break-word;white-space:pre-wrap}
+#card .ft{font-size:10px;color:var(--txt-3);border-top:1px solid var(--line);padding-top:7px}
+
+/* ── Modale / toast ─────────────────────────────────────────────────── */
+.mask{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);display:none;
+  align-items:center;justify-content:center;padding:20px}
+.mask.on{display:flex}
+.modal{width:min(440px,100%);border-radius:16px;border:1px solid var(--line-2);
+  background:#1f1f1f;padding:20px}
+.modal h3{margin:0 0 4px;font-size:16px;font-weight:600}
+.modal p{margin:0 0 16px;font-size:12.5px;color:var(--txt-3)}
+.pick{display:flex;flex-direction:column;gap:9px;margin-bottom:18px}
+.pick button{display:flex;gap:11px;align-items:flex-start;text-align:left;padding:12px 14px;
+  border-radius:12px;border:1px solid var(--line);transition:border-color .15s,background .15s}
+.pick button:hover{background:var(--bg-hover)}
+.pick button.on{border-color:var(--blue);background:rgba(107,167,240,.09)}
+.pick .dot{width:9px;height:9px;flex:0 0 9px;border-radius:50%;margin-top:5px;background:var(--txt-3)}
+.pick button.on .dot{background:var(--blue);box-shadow:0 0 9px rgba(107,167,240,.9)}
+.pick .nm{font-size:14px;color:var(--txt);display:block}
+.pick .sub{font-size:12px;color:var(--txt-3);margin-top:2px;line-height:1.5;display:block}
+.pick button.newopt{border-style:dashed;color:var(--txt-2)}
+.pick button.newopt .nm{color:var(--txt-2)}
+/* Il pulsante "Crea un nuovo spazio" nella modale nuova conversazione. Prima aveva display:none di default e nessun codice aggiungeva
+   .on, quindi era invisibile per sempre — l'ingresso per creare spazi è scomparso così. Mostrato di default. */
+.newspace{display:flex;gap:8px;margin:-8px 0 18px}
+.newspace.off{display:none}
+.newspace input{flex:1;min-width:0;padding:8px 11px;border-radius:9px;border:1px solid var(--line);
+  background:var(--bg-input);color:var(--txt);font-size:13px}
+.newspace input::placeholder{color:var(--txt-3)}
+.newspace input:focus{outline:none;border-color:var(--blue)}
+/* Il selettore lingua usa l'aspetto nativo del browser; nel tema scuro il
+  contrasto può essere insufficiente. Questo stile uniforma il controllo agli input. */
+.newspace select{padding:8px 28px 8px 11px;border-radius:9px;border:1px solid var(--line);
+  background:var(--bg-input);color:var(--txt);font-size:13px;cursor:pointer;
+  appearance:none;-webkit-appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,var(--txt-3) 50%),
+                   linear-gradient(135deg,var(--txt-3) 50%,transparent 50%);
+  background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+.newspace select:focus{outline:none;border-color:var(--blue)}
+/* Il menu aperto è disegnato dal sistema; colori espliciti mantengono il tema coerente. */
+.newspace select option{background:var(--bg-input);color:var(--txt)}
+.modal-foot{display:flex;justify-content:flex-end;gap:9px}
+#toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);padding:9px 16px;
+  border-radius:10px;background:#2f2f2f;border:1px solid var(--line-2);font-size:13px;
+  color:var(--txt);opacity:0;pointer-events:none;z-index:70;transition:opacity .2s,transform .2s}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+
+@media (max-width:1180px){
+  #app{grid-template-columns:56px minmax(320px,380px) minmax(340px,1fr)}
+}
+@media (max-width:860px){
+  #app,#app.collapsed{grid-template-columns:1fr;grid-template-rows:auto 1fr;overflow:auto}
+  .rightpane{border-left:none;border-top:1px solid var(--line);min-height:70vh}
+}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ① Barra laterale: Memory Space e conversazioni dello spazio -->
+  <aside class="sidebar">
+    <div class="side-head">
+      <button class="ico" id="btnCollapse" title="Comprimi barra laterale" aria-label="Comprimi barra laterale">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9.5 4v16"/></svg>
+      </button>
+      <span class="grow"></span>
+      <button class="ico" id="btnSearch" title="Cerca conversazioni (⌘K)" aria-label="Cerca conversazioni">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+      </button>
+      <button class="ico" id="btnNew" title="Nuova conversazione" aria-label="Nuova conversazione">
+        <svg viewBox="0 0 24 24"><path d="M4 20h4l10-10a2.5 2.5 0 0 0-3.5-3.5L4.5 16.5V20z"/><path d="M13.5 7.5 16.5 10.5"/></svg>
+      </button>
+    </div>
+    <div class="side-search" id="sideSearch"><input id="searchIn" placeholder="Cerca conversazioni" spellcheck="false" /></div>
+    <div class="side-scroll">
+      <div class="side-label">Conversazioni<span class="c" id="sessCount"></span></div>
+      <ul class="sess" id="sessList"></ul>
+    </div>
+    <div class="side-foot">VOICEMEM</div>
+  </aside>
+
+  <!-- ② Conversazione in tempo reale -->
+  <section class="center">
+    <canvas id="orb" width="264" height="264" aria-hidden="true"></canvas>
+
+    <div class="panel p-in">
+      <div class="panel-h" data-i18n="liveInput">Input streaming · Live input</div>
+      <div class="spk" id="spk">
+        <span class="av" id="spkAv">Tu</span>
+        <span class="nm" id="spkNm">Tu</span>
+        <span class="id" id="spkId" data-i18n="voiceMatched">speaker 0 · voce riconosciuta</span>
+        <span class="lv" id="spkLv"><i></i><i></i><i></i><i></i><i></i></span>
+      </div>
+      <div class="live-text idle" id="liveInput" data-i18n="waitingYou">In attesa della tua voce…</div>
+      <input id="textIn" class="textin" placeholder="Oppure scrivi e premi Invio" />
+      <div class="tags" id="tags"></div>
+    </div>
+
+    <div class="panel p-recall">
+      <div class="panel-h">Recupero Top-K</div>
+      <div class="recall-cols">
+        <div class="rc l"><div class="rc-h">Sinistro · fatti</div><ul id="recallL"></ul></div>
+        <div class="rc r"><div class="rc-h">Destro · profilo</div><ul id="recallR"></ul></div>
+      </div>
+    </div>
+
+    <div class="panel p-out">
+      <div class="panel-h">Risposta AI</div>
+      <div class="reply idle" id="reply">Nessuna risposta ancora.</div>
+      <div class="out-foot">
+        <div class="voice" id="voice">
+          <div class="ear"><span class="ring"></span></div>
+          <canvas id="wave"></canvas>
+          <span class="lab" id="voiceLab">Inattivo</span>
+        </div>
+        <div class="btns">
+          <button class="btn" id="pauseBtn" disabled>Pausa</button>
+          <button class="btn primary" id="talkBtn">Inizia a parlare</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ③ Chat / Memory Space -->
+  <section class="rightpane">
+    <div class="topbar">
+      <div class="seg" id="seg">
+        <span class="seg-thumb"></span>
+        <button data-v="chat" class="on" data-i18n="chat">Chat</button>
+        <button data-v="mem" data-i18n="memspace">Memory Space</button>
+      </div>
+      <div class="export">
+        <span class="pill space" id="spaceBadge" data-i18n-title="spaceBadgeTitle"
+              title="Memory Space corrente — cambiala per cambiare anche il grafo">
+          <svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+          <span id="spaceBadgeName">Demo</span>
+        </span>
+        <select class="sel" id="spaceSel" data-i18n-title="spaceSelTitle"
+                title="Cambia Memory Space"></select>
+        <button class="btn sm" id="newSpaceBtn" data-i18n-title="spaceNewTitle"
+                title="Crea una nuova Memory Space">+</button>
+        <select class="sel" id="langSel" title="Lingua dell'interfaccia e dell'assistente">
+          <option value="it">Italiano</option>
+          <option value="en">EN</option>
+        </select>
+        <select class="sel" id="dlScope" title="Seleziona l'ambito di esportazione">
+          <option value="all" data-i18n="dlAll">Tutte le memorie dello spazio</option>
+          <option value="left" data-i18n="dlLeft">Sinistro · fatti</option>
+          <option value="right" data-i18n="dlRight">Destro · profilo</option>
+          <option value="chat" data-i18n="dlChat">Conversazione corrente</option>
+        </select>
+        <button class="btn sm" id="dlBtn" data-i18n="download">Scarica</button>
+      </div>
+    </div>
+
+    <div class="viewport">
+      <div class="track" id="track">
+        <div class="pane">
+          <div class="chat-head">
+            <span class="ttl" id="chatTitle">Nuova conversazione</span>
+          </div>
+          <div class="chat" id="chatLog"></div>
+        </div>
+        <div class="pane">
+          <div class="brainwrap" id="brainwrap">
+            <img id="brain" alt="" src="./images/background.webp" />
+            <canvas id="fx"></canvas>
+            <div class="legend">
+              <span><i style="background:#6ba7f0"></i>Sinistro · fatti</span>
+              <span><i style="background:#ef7bab"></i>Destro · profilo</span>
+            </div>
+            <div id="card" aria-hidden="true">
+              <div class="eb"><span class="sw" id="c-sw"></span><span class="kd" id="c-kd">entity</span><span class="id" id="c-id">#0000</span></div>
+              <div class="cbody" id="c-body">…</div>
+              <div class="ft"><span id="c-src">—</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- Nuova conversazione: scegli prima una Memory Space -->
+<div class="mask" id="mask">
+  <div class="modal">
+    <h3 data-i18n="newChat">Nuova conversazione</h3>
+    <p data-i18n="pickSpaceHint">Scegli prima una Memory Space. La conversazione non potrà essere spostata.</p>
+    <div class="pick" id="pick"></div>
+    <div class="newspace" id="newSpaceRow">
+      <input id="newSpaceName" data-i18n-ph="spaceNamePh" placeholder="Nome della nuova space" maxlength="20" spellcheck="false" />
+      <button class="btn sm" id="newSpaceAdd" data-i18n="spaceCreate">Crea space</button>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="mCancel" data-i18n="cancel">Annulla</button>
+      <button class="btn primary" id="mCreate" data-i18n="chatCreate">Crea conversazione</button>
+    </div>
+  </div>
+</div>
+<!-- Nuova Memory Space, in una finestra separata dalla nuova conversazione -->
+<div class="mask" id="spaceMask">
+  <div class="modal">
+    <h3 data-i18n="spaceNewTitle">Nuova Memory Space</h3>
+    <p data-i18n="spaceNewHint">Dalle un nome. Verrà creata una cartella vuota.</p>
+    <div class="newspace">
+      <input id="spaceNewName" data-i18n-ph="spaceNamePh" placeholder="Nome della nuova space"
+             maxlength="20" spellcheck="false" />
+      <!-- La lingua viene fissata alla creazione e guida memorie e risposte. Non mescolare lingue nella stessa space.
+           Mescolare lingue nella stessa memoria riduce il recupero semantico. -->
+      <select id="spaceNewLang">
+        <option value="en">English</option>
+        <option value="it">Italiano</option>
+      </select>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="spaceNewCancel" data-i18n="cancel">Annulla</button>
+      <button class="btn primary" id="spaceNewOk" data-i18n="spaceCreate">Crea space</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+/* Se lo script fallisce, gli event listener successivi non vengono registrati:
+  mostriamo gli errori direttamente nella pagina per facilitare il debug. */
+(function(){
+  function show(msg){
+    var d=document.getElementById('__err');
+    if(!d){
+      d=document.createElement('div'); d.id='__err';
+      d.style.cssText='position:fixed;left:0;right:0;top:0;z-index:99999;'+
+        'background:#7f1d1d;color:#fecaca;font:12px/1.6 ui-monospace,monospace;'+
+        'padding:8px 12px;white-space:pre-wrap;max-height:38vh;overflow:auto';
+      (document.body||document.documentElement).appendChild(d);
+    }
+    d.textContent += msg + '\n';
+  }
+  window.addEventListener('error', function(e){
+    show('[Errore JS] ' + (e.message||'') + '\n  ' + (e.filename||'') + ':' + (e.lineno||'') +
+         (e.error && e.error.stack ? '\n' + e.error.stack.split('\n').slice(0,4).join('\n') : ''));
+  });
+  window.addEventListener('unhandledrejection', function(e){
+    show('[Promise non gestita] ' + (e.reason && (e.reason.stack||e.reason.message) || e.reason));
+  });
+})();
+/* ══════════════════════════════════════════════════════════════════════
+  0. Lingua: testi dell'interfaccia e lingua dell'assistente cambiano insieme
+
+  I testi sono raccolti nella tabella I18N e usano i18n('key'). Gli attributi
+  data-i18n, data-i18n-ph e data-i18n-title vengono aggiornati al cambio lingua.
+
+  I placeholder {0} e {1} permettono di gestire correttamente l'ordine delle parole.
+   ══════════════════════════════════════════════════════════════════════ */
+const I18N = {
+  it: {
+    chat:'Chat', memspace:'Memory Space', liveInput:'Input streaming',
+    you:'Tu', waitingYou:'In attesa della tua voce…', noReplyYet:'Nessuna risposta ancora.',
+    talkStart:'Inizia a parlare', talkEnd:'Termina sessione', pause:'Pausa', resume:'Riprendi',
+    ended:'Sessione terminata.', idle:'Inattivo', listening:'In ascolto', replying:'Risposta in corso', paused:'In pausa',
+    left:'Cervello sinistro', right:'Cervello destro', factsShort:'fatti', profileShort:'profilo',
+    leftFacts:'Sinistro · Fatti', rightProfile:'Destro · Profilo', emotion:'Emozione', personality:'Personalità', preference:'Preferenza',
+    newChat:'Nuova conversazione', expand:'Espandi barra laterale', collapse:'Comprimi barra laterale',
+    download:'Scarica', dlAll:'Tutte le memorie dello spazio', dlLeft:'Sinistro · Fatti', dlRight:'Destro · Profilo', dlChat:'Conversazione corrente',
+    spaceNamePh:'Nome del nuovo spazio', spaceCreate:'Crea spazio', spaceCreating:'Creazione…', chatCreate:'Crea conversazione', cancel:'Annulla',
+    pickSpaceHint:'Scegli prima una Memory Space. Una conversazione non può essere spostata in seguito.',
+    ownerNote:'Proprietario del grafo memoria: ogni memoria è ancorata a te.', waitRetrieve:'In attesa del recupero…', noHitThisTurn:'Nessuna corrispondenza',
+    notConnected:'Backend non connesso (premi “Inizia a parlare”)', noChatInSpace:'Nessuna conversazione in questo spazio.', noMatchInSpace:'Nessuna conversazione corrispondente.',
+    emptyChat:'Questa conversazione è vuota.', noMemInSpace:'Nessuna memoria in questo spazio.', needName:'Inserisci prima un nome', nameTaken:'Nome già utilizzato',
+    nameBad:'Nome non valido', createFailed:'Creazione non riuscita', micUnsupported:'Il browser non supporta il microfono (serve https o localhost).', backendGone:'Backend disconnesso.',
+    switching:'Passaggio a “{0}”…', switched:'Ora nello spazio “{0}”', switchFailed:'Impossibile cambiare spazio', created:'Creato “{0}”',
+    turnsN:'{0} turni', memN:'{0} memorie', andMore:'…e altre {0}', spaceStat:'{0} fatti · {1} note di profilo', badgeStat:'{0} (S{1}/D{2})',
+    startHint:'<b>Inizia una conversazione</b> Questa conversazione appartiene a {0}. Parla o scrivi a sinistra.', createdIn:'Creata in {0}. Non può essere spostata.',
+    downloadedChat:'Conversazione scaricata.', downloadedN:'Scaricate {0} memorie ({1}).', rbInternalOnly:'{0} risultati del cervello destro, tutte note interne',
+    voiceMatched:'speaker 0 · voce riconosciuta', voiceKnown:' · riconosciuto come “{0}”', mySpace:'Creato da me', diskSpace:'Sul disco',
+    spaceBadgeTitle:'Memory Space corrente — cambiandola cambia anche il grafo', spaceSelTitle:'Cambia Memory Space', spaceNewTitle:'Nuova Memory Space',
+    spaceNewHint:'Dalle un nome. Verrà creata una cartella vuota.', spaceStat3:'{0} fatti · {1} note · {2} conversazioni', connected:'Connesso ({0})',
+    micFailed:'Microfono non disponibile: {0}', cantConnect:'Impossibile raggiungere {0}. Verifica che web/run.py sia in esecuzione.', disconnected:'{0}. Disconnesso.',
+  },
+  en: {
+    chat:'Chat', memspace:'Memory Space', liveInput:'Live input',
+    you:'You', waitingYou:'Waiting for you to speak…', noReplyYet:'No reply yet.',
+    talkStart:'Start talking', talkEnd:'End session', pause:'Pause', resume:'Resume',
+    ended:'Session ended.',
+    idle:'Idle', listening:'Listening', replying:'Replying', paused:'Paused',
+    left:'Left brain', right:'Right brain', factsShort:'facts', profileShort:'profile',
+    leftFacts:'Left · Facts', rightProfile:'Right · Profile',
+    emotion:'Emotion', personality:'Personality', preference:'Preference',
+    newChat:'New chat', expand:'Expand sidebar', collapse:'Collapse sidebar',
+    download:'Download', dlAll:'All memories in this space', dlLeft:'Left · Facts',
+    dlRight:'Right · Profile', dlChat:'This conversation',
+    spaceNamePh:'Name the new space', spaceCreate:'Create space', spaceCreating:'Creating…',
+    chatCreate:'Create chat', cancel:'Cancel',
+    pickSpaceHint:'Pick a Memory Space first. A chat cannot move to another space later.',
+    ownerNote:'The owner of this memory graph — every memory is anchored to you.',
+    waitRetrieve:'Waiting for retrieval…', noHitThisTurn:'Nothing matched this turn',
+    notConnected:'Not connected (hit “Start talking”)',
+    noChatInSpace:'No chats in this space yet. Start one from the top right.',
+    noMatchInSpace:'No matching chats in this space.',
+    emptyChat:'This chat is still empty.',
+    noMemInSpace:'No memories in this space yet.',
+    needName:'Give it a name first', nameTaken:'That name is taken',
+    nameBad:'Invalid name', createFailed:'Could not create it',
+    micUnsupported:'This browser has no microphone access (needs https or localhost).',
+    backendGone:'Backend disconnected.',
+    switching:'Switching to “{0}”…', switched:'Now in “{0}”', switchFailed:'Could not switch',
+    created:'Created “{0}”',
+    turnsN:'{0} turns', memN:'{0} memories',
+    andMore:'…and {0} more',
+    spaceStat:'{0} facts · {1} profile notes',
+    badgeStat:'{0} (L{1}/R{2})',
+    startHint:'<b>Start a conversation</b>This chat lives in {0}. Say something, or type on the left.',
+    createdIn:'Created in {0}. A chat cannot move to another space.',
+    downloadedChat:'Conversation downloaded.', downloadedN:'Downloaded {0} memories ({1}).',
+    rbInternalOnly:'{0} right-brain hits this turn, all internal notes',
+    voiceMatched:'speaker 0 · voice matched', voiceKnown:' · recognized as “{0}”',
+    mySpace:'Created by me', diskSpace:'On disk',
+    spaceBadgeTitle:'Current Memory Space — switch it and the graph switches too',
+    spaceSelTitle:'Switch Memory Space',
+    spaceNewTitle:'New Memory Space',
+    spaceNewHint:'Give it a name. A folder appears on disk and memories start from zero.',
+    spaceStat3:'{0} facts · {1} profile notes · {2} chats',
+    connected:'Connected ({0}) — simulation stopped.',
+    micFailed:'No microphone: {0}',
+    cantConnect:'Cannot reach {0}. Check that python web/run.py is running.',
+    disconnected:'{0}. Disconnected.',
+  },
+};
+let LANG = localStorage.getItem('vm-lang') || 'it';
+function i18n(key, ...args){
+  const s = (I18N[LANG] && I18N[LANG][key]) || (I18N.it[key]) || key;
+  return args.length ? s.replace(/\{(\d+)\}/g, (m,i)=> args[i] !== undefined ? args[i] : m) : s;
+}
+/* Aggiorna gli attributi data-i18n* del markup statico. */
+function applyLang(){
+  document.documentElement.lang = LANG === 'en' ? 'en' : 'it';
+  for(const el of document.querySelectorAll('[data-i18n]'))
+    el.innerHTML = i18n(el.dataset.i18n);
+  for(const el of document.querySelectorAll('[data-i18n-ph]'))
+    el.placeholder = i18n(el.dataset.i18nPh);
+  for(const el of document.querySelectorAll('[data-i18n-title]'))
+    el.title = i18n(el.dataset.i18nTitle);
+}
+/* ══════════════════════════════════════════════════════════════════════
+  A. Brain graph: nodes stay inside the two hemisphere outlines.
+  Background image: 1672×941. Each hemisphere uses an inscribed ellipse;
+  cluster members are distributed around its center and kept inside the outline.
+  ══════════════════════════════════════════════════════════════════════ */
+window.VMBrain = (function(){
+const IMG_AR = 1672/941;
+const BOX  = { x0:0.245, x1:0.755, y0:0.11, y1:0.855 };
+const HEMI = { L:{cx:0.378, cy:0.485, rx:0.090, ry:0.295},
+               R:{cx:0.622, cy:0.485, rx:0.090, ry:0.295} };
+const LEFT_SLOTS  = ['work','health','relationships','finance','goals','daily_life','knowledge'];
+const RIGHT_SLOTS = ['emotion','personality','preference'];
+/* Labels for each graph partition, following the selected interface language. */
+const SLOT_DESC_I18N = {
+  it: {
+    work:'Lavoro · carriera / progetti / colleghi / riunioni',
+      health:'Salute · esercizio / alimentazione / sonno / corpo',
+      relationships:'Relazioni · famiglia / amici / partner / socialità',
+      finance:'Finanze · entrate / spese / affitto / investimenti',
+      goals:'Obiettivi · piani / futuro / crescita personale',
+      daily_life:'Vita quotidiana · abitudini / spostamenti / stile di vita',
+      knowledge:'Conoscenza · studio / lettura / competenze',
+      emotion:'Emozione · stato emotivo presente e storico',
+      personality:'Personalità · tendenze stabili e strategie',
+      preference:'Preferenze · gusti personali e stile comunicativo',
+  },
+  en: {
+    work:'Work · career / projects / colleagues / meetings',
+    health:'Health · exercise / food / sleep / body',
+    relationships:'People · family / friends / partner / social',
+    finance:'Money · income / spending / rent / investing',
+    goals:'Goals · plans / future / self-improvement',
+    daily_life:'Daily life · habits / commute / lifestyle',
+    knowledge:'Knowledge · study / reading / skills',
+    emotion:'Emotion · how they feel, now and over time',
+    personality:'Personality · stable tendencies and coping',
+    preference:'Preference · what they like, and how they like it said',
+  },
+};
+const SLOT_DESC = new Proxy({}, {
+  get:(_,k)=> (SLOT_DESC_I18N[LANG]||SLOT_DESC_I18N.it)[k],
+  has:(_,k)=> k in SLOT_DESC_I18N.it,
+  ownKeys:()=> Reflect.ownKeys(SLOT_DESC_I18N.it),
+  getOwnPropertyDescriptor:()=>({enumerable:true, configurable:true}),
+});
+const PAL = { entity:'#6ba7f0', emotion:'#ef7bab', exper:'#f0a35f',
+              prefer:'#79d7a2', label:'#ffffff', user:'#d766ad' };
+const KIND_CN = { entity:i18n('factsShort'), emotion:i18n('emotion'), exper:i18n('personality'), prefer:i18n('preference') };
+const RPX = { entity:3.0, emotion:5.0, exper:4.6, prefer:4.8, user:8.0 };
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const wrap  = document.getElementById('brainwrap');
+const cv    = document.getElementById('fx');
+const ctx   = cv.getContext('2d', {alpha:true});
+const brain = document.getElementById('brain');
+const card  = document.getElementById('card');
+const cKd=document.getElementById('c-kd'), cId=document.getElementById('c-id'),
+      cSw=document.getElementById('c-sw'), cSrc=document.getElementById('c-src'),
+      cBody=document.getElementById('c-body');
+
+let N=[], L=[], NB=[], BEAM=[], USER=0;
+const t0=performance.now();
+let W=0,H=0,DPR=1,IW=0,IH=0,OX=0,OY=0,S=1;
+//: Animation of a beam travelling from the left to the right graph area.
+const PULSE={t:-0.6,dur:.9,trail:.3,seg:26};
+//: Hit nodes briefly grow, return to normal, and remain highlighted for a moment.
+const HIT={pop:.42, hold:1.0, fade:.45};
+function nowT(){ return (performance.now()-t0)/1000; }
+
+function mk(o){
+  o.id=N.length; o.ph=Math.random()*6.28; o.ph2=Math.random()*6.28;
+  o.sp=.28+Math.random()*.4; o.ax=.5+Math.random()*.9; o.ay=.5+Math.random()*.9;
+  o.x=0;o.y=0;o.sx=0;o.sy=0;o.h=0;o.p=0;o.iv=0;o.hit=0;o.hitT=0;o.act=0;o.bw=0;o.bh=0;
+  if(o.dl==null) o.dl=nowT()+Math.random()*.3;
+  N.push(o); NB.push([]); return o.id;
+}
+function base(){
+  N=[]; L=[]; NB=[]; BEAM=[];
+  LEFT_SLOTS.forEach((s,i)=>mk({kind:'label',side:'L',cluster:s,seat:i,w:s,r:0}));
+  RIGHT_SLOTS.forEach((s,i)=>mk({kind:'label',side:'R',cluster:s,seat:i,w:s,r:0}));
+  USER = mk({kind:'user',side:'C',cluster:null,seat:0,w:'you',r:RPX.user});
+  for(let i=0;i<LEFT_SLOTS.length+RIGHT_SLOTS.length;i++) link(USER,i,'cross',.5);
+}
+function link(a,b,t,w){
+  if(a===b||N[a]===undefined||N[b]===undefined) return;
+  for(const i of NB[a]) if(i===b) return;
+  L.push({a,b,t:t||'in',w:w||.4}); NB[a].push(b); NB[b].push(a);
+}
+function labelOf(cluster){
+  for(const n of N) if(n.kind==='label'&&n.cluster===cluster) return n.id;
+  return -1;
+}
+function add(side, kind, label, cluster, detail){
+  const li=labelOf(cluster);
+  const id=mk({kind, side, cluster, w:label, r:RPX[kind]||3, seat:0,
+    act:.9, detail:detail||null, dl:nowT()});
+  if(li>=0) link(li,id,'in',.34); else link(USER,id,'cross',.5);
+  layout();
+  return id;
+}
+
+/* ---- Layout ---- */
+function hemi(side){
+  const h=HEMI[side]||HEMI.L;
+  return { cx:OX+h.cx*IW, cy:OY+h.cy*IH, rx:h.rx*IW, ry:h.ry*IH };
+}
+function seatUV(side, seat, k){
+  const a=-Math.PI/2 + seat*(Math.PI*2/k);
+  const R = side==='R' ? 0.56 : 0.63;
+  return [Math.cos(a)*R, Math.sin(a)*R];
+}
+function layout(){
+  if(!IW) return;
+  const groups={};
+  for(const n of N){
+    if(n.kind==='label'||n.kind==='user') continue;
+    (groups[n.cluster]=groups[n.cluster]||[]).push(n);
+  }
+  for(const n of N){
+    if(n.kind==='user'){ n.sx=OX+0.5*IW; n.sy=OY+0.50*IH; continue; }
+    if(n.kind!=='label') continue;
+    const k=n.side==='R'?RIGHT_SLOTS.length:LEFT_SLOTS.length;
+    const h=hemi(n.side), uv=seatUV(n.side,n.seat,k);
+    n.sx=h.cx+uv[0]*h.rx; n.sy=h.cy+uv[1]*h.ry;
+  }
+  for(const c in groups){
+    const g=groups[c], m=g.length, side=g[0].side;
+    const k=side==='R'?RIGHT_SLOTS.length:LEFT_SLOTS.length;
+    const li=labelOf(c), seat=li>=0?N[li].seat:0;
+    const h=hemi(side), uv=seatUV(side,seat,k);
+    const maxR=(side==='R'?.46:.34)*h.rx;
+    const R=Math.min(maxR,(side==='R'?.16:.13)*h.rx*Math.sqrt(m+1));
+    for(let i=0;i<m;i++){
+      const ang=i*2.399963+seat*0.7;
+      const rad=R*(0.5+0.5*Math.sqrt((i+0.5)/m));
+      let u=uv[0]+Math.cos(ang)*rad/h.rx;
+      let v=uv[1]+Math.sin(ang)*rad/h.ry;
+      const d=Math.hypot(u,v); if(d>0.95){ u*=0.95/d; v*=0.95/d; }
+      g[i].sx=h.cx+u*h.rx; g[i].sy=h.cy+v*h.ry;
+    }
+  }
+}
+
+/* ---- Size: preserve the brain outline aspect ratio and center it. ---- */
+function resize(){
+  const r=wrap.getBoundingClientRect();
+  if(!r.width||!r.height) return;
+  W=r.width; H=r.height;
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  const dx=BOX.x1-BOX.x0, dy=BOX.y1-BOX.y0;
+  const boxAR=dx*IMG_AR/dy;
+  let bh=H*0.94, bw=bh*boxAR;
+  if(bw>W*0.94){ bw=W*0.94; bh=bw/boxAR; }
+  IW=bw/dx; IH=bh/dy;
+  OX=(W-bw)/2-BOX.x0*IW; OY=(H-bh)/2-BOX.y0*IH;
+  brain.style.left=OX.toFixed(1)+'px'; brain.style.top=OY.toFixed(1)+'px';
+  brain.style.width=IW.toFixed(1)+'px'; brain.style.height=IH.toFixed(1)+'px';
+  S=Math.max(.62, bh/620);
+  layout(); buildGlow();
+}
+new ResizeObserver(resize).observe(wrap);
+brain.addEventListener('load',()=>{ resize(); brain.classList.add('in'); });
+if(brain.complete&&brain.naturalWidth) brain.classList.add('in');
+
+/* ---- Glow ---- */
+const GLOW={};
+function hexa(h,a){ const n=parseInt(h.slice(1),16);
+  return 'rgba('+(n>>16)+','+(n>>8&255)+','+(n&255)+','+a+')'; }
+function buildGlow(){
+  for(const k in PAL){
+    if(k==='label') continue;
+    const R=Math.max(16,Math.round((k==='user'?90:44)*S));
+    const c=document.createElement('canvas'); c.width=c.height=R*2;
+    const g=c.getContext('2d'), rg=g.createRadialGradient(R,R,0,R,R,R);
+    rg.addColorStop(0,hexa(PAL[k],.52)); rg.addColorStop(.3,hexa(PAL[k],.18));
+    rg.addColorStop(.65,hexa(PAL[k],.04)); rg.addColorStop(1,hexa(PAL[k],0));
+    g.fillStyle=rg; g.fillRect(0,0,R*2,R*2); GLOW[k]=c;
+  }
+}
+
+/* ---- Pointer ---- */
+let mx=-9999,my=-9999,has=false,sel=-1,selPrev=-1;
+let cX=0,cY=0,cTX=0,cTY=0,cSide=1,cOn=false;
+function pt(e){ const r=cv.getBoundingClientRect(); mx=e.clientX-r.left; my=e.clientY-r.top; has=true; }
+wrap.addEventListener('pointermove',pt,{passive:true});
+wrap.addEventListener('pointerdown',pt,{passive:true});
+wrap.addEventListener('pointerleave',()=>{has=false;mx=my=-9999;},{passive:true});
+
+/* ---- Main loop ---- */
+let tPrev=performance.now();
+function frame(now){
+  const t=(now-t0)/1000, dt=Math.min(.05,(now-tPrev)/1000); tPrev=now;
+  ctx.clearRect(0,0,W,H);
+  const amp=REDUCED?0:3.4*S;
+  for(const n of N){
+    let u=Math.min(1,Math.max(0,(t-n.dl)/0.6));
+    n.iv=1-Math.pow(1-u,3);
+    n.x=n.sx+Math.sin(t*n.sp+n.ph)*amp*n.ax;
+    n.y=n.sy+Math.cos(t*n.sp*.83+n.ph2)*amp*n.ay;
+  }
+  let best=-1,bd=1e9;
+  if(has) for(const n of N){
+    let d;
+    if(n.kind==='label'&&n.bw){
+      const dx=Math.max(Math.abs(n.x-mx)-n.bw/2,0), dy=Math.max(Math.abs(n.y-my)-n.bh/2,0);
+      d=Math.hypot(dx,dy);
+    } else d=Math.max(0,Math.hypot(n.x-mx,n.y-my)-n.r*S);
+    if(d<bd){ bd=d; best=n.id; }
+  }
+  if(bd>26) best=-1;
+  sel=best;
+  const lit=new Set(sel>=0?NB[sel]:[]);
+  for(const n of N){
+    const tg=Math.max(n.id===sel?1:(lit.has(n.id)?.4:0), n.act||0);
+    n.h+=(tg-n.h)*(tg?.22:.10);
+    let p=0; if(has){ const d=Math.hypot(n.x-mx,n.y-my); p=d<120*S?(1-d/(120*S)):0; p*=p; }
+    n.p+=(p-n.p)*.14;
+    if(n.act>0) n.act=Math.max(0,n.act-dt*.5);
+  }
+  ctx.lineCap='round';
+  for(const l of L){
+    const a=N[l.a], b=N[l.b];
+    const st = l.t==='cross' ? ['rgba(198,214,240,',.13,1.1]
+             : l.t==='rel'   ? ['rgba(170,196,230,',.13,.7]
+                             : ['rgba(150,180,220,',.17,.75];
+    const lift=Math.max(a.h,b.h)*.4+Math.max(a.p,b.p)*.15;
+    const al=(st[1]*(l.w||1)+lift)*Math.min(a.iv,b.iv);
+    if(al<=.006) continue;
+    ctx.strokeStyle=st[0]+al.toFixed(3)+')';
+    ctx.lineWidth=st[2]*(1+lift*1.4)*Math.max(.7,S*.8);
+    ctx.beginPath(); ctx.moveTo(a.x,a.y);
+    if(l.t==='cross'){ const c=ctl(a,b); ctx.quadraticCurveTo(c[0],c[1],b.x,b.y); }
+    else ctx.lineTo(b.x,b.y);
+    ctx.stroke();
+  }
+  if(!REDUCED&&BEAM.length){
+    PULSE.t+=dt/PULSE.dur;
+    if(PULSE.t>1+PULSE.trail){ BEAM.length=0; PULSE.t=-.02; }
+    if(PULSE.t>-PULSE.trail){
+      ctx.globalCompositeOperation='lighter';
+      const STEP=PULSE.trail/PULSE.seg;
+      for(const p of BEAM){
+        const a=N[p.a], b=N[p.b]; if(!a||!b) continue;
+        const c=ctl(a,b);
+        const at=u=>{const iu=1-u;
+          return [iu*iu*a.x+2*iu*u*c[0]+u*u*b.x, iu*iu*a.y+2*iu*u*c[1]+u*u*b.y];};
+        for(let pass=0;pass<2;pass++) for(let i=0;i<PULSE.seg;i++){
+          const u1=PULSE.t-i*STEP, u0=u1-STEP;
+          if(u1<=0||u0>=1) continue;
+          const q0=at(Math.max(0,u0)), q1=at(Math.min(1,u1));
+          const k=1-i/PULSE.seg, e=k*k*(3-2*k);
+          // Warm gold beam with a pale core for contrast on the dark background.
+          ctx.strokeStyle=pass?'rgba(255,240,190,'+(.62*e).toFixed(3)+')'
+                              :'rgba(255,196,74,'+(.13*e).toFixed(3)+')';
+          ctx.lineWidth=(pass?1.3*e+.4:4.2*e+1)*Math.max(.8,S*.8);
+          ctx.beginPath(); ctx.moveTo(q0[0],q0[1]); ctx.lineTo(q1[0],q1[1]); ctx.stroke();
+        }
+      }
+      ctx.globalCompositeOperation='source-over';
+    }
+  }
+  ctx.globalCompositeOperation='lighter';
+  for(const n of N){
+    const g=GLOW[n.kind]; if(!g) continue;
+    const k=n.r*S*3.0*(1+n.h*1.1+n.p*.25);
+    const idle=REDUCED?1:(1+.25*Math.sin(t*.78+n.ph));
+    const a=(.15*idle+n.h*.6+n.p*.2)*n.iv;
+    ctx.globalAlpha=Math.min(1,a);
+    ctx.drawImage(g,n.x-k,n.y-k,k*2,k*2);
+  }
+  ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over';
+  for(const n of N){
+    if(n.kind==='label') continue;
+    const r=n.r*S*(1+n.h*.5+n.p*.12)*(0.4+0.6*n.iv);
+    const a=(.75+n.h*.25)*n.iv;
+    ctx.strokeStyle=hexa(PAL[n.kind],a);
+    ctx.fillStyle=hexa(PAL[n.kind],a*.18);
+    ctx.lineWidth=Math.max(.8,1.2*Math.max(.8,S*.8));
+    shape(n,r,t);
+  }
+  const FS=Math.max(8.6,9.6*S);
+  ctx.font=FS.toFixed(1)+'px '+getComputedStyle(document.body).fontFamily;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(const n of N){
+    if(n.kind!=='label'&&n.kind!=='user') continue;
+    const w=n.kind==='user'?'you':n.w;
+    const tw=ctx.measureText(w).width, bw=tw+FS*1.5, bh=FS*1.9;
+    const cy=n.kind==='user'?n.y+n.r*S+bh*.9:n.y;
+    if(n.kind==='label'){ n.bw=bw; n.bh=bh; }
+    const a=n.iv*(.6+n.h*.4);
+    ctx.beginPath(); rrect(n.x-bw/2,cy-bh/2,bw,bh,5);
+    ctx.fillStyle='rgba(8,8,8,'+(0.88*n.iv).toFixed(3)+')'; ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,'+(a*.5).toFixed(3)+')';
+    ctx.lineWidth=Math.max(.7,.9*Math.max(.8,S*.8)); ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,'+(n.iv*.95).toFixed(3)+')';
+    ctx.fillText(w,n.x,cy+FS*.06);
+  }
+  // Hit nodes flash white, grow briefly, hold, and then fade out.
+  //
+  // The three phases make the retrieved node clear: pop, hold, and fade.
+  ctx.globalCompositeOperation='lighter';
+  for(const n of N){
+    if(!n.hit) continue;
+    const age=t-(n.hitT||0);
+    let amp, scale;
+    if(age<HIT.pop){                       // Grow and return with ease-out.
+      const k=age/HIT.pop;
+      amp=1; scale=1+.55*Math.sin(Math.PI*k)*(1-k*.35);
+    }else if(age<HIT.pop+HIT.hold){        // Hold with a subtle pulse.
+      amp=1; scale=1+.06*Math.sin(t*2.4+n.ph);
+    }else{                                 // Fade out.
+      const k=(age-HIT.pop-HIT.hold)/HIT.fade;
+      if(k>=1){ n.hit=0; continue; }
+      amp=1-k; scale=1+.04*(1-k);
+    }
+    const a=n.hit*amp;
+    const base2=(n.r*S+4.2*Math.max(.7,S*.8))*scale;
+    ctx.beginPath(); ctx.arc(n.x,n.y,base2+4,0,6.2832);   // Soft outer ring.
+    ctx.strokeStyle='rgba(255,255,255,'+(.20*a).toFixed(3)+')';
+    ctx.lineWidth=Math.max(4,6.0*S*.8); ctx.stroke();
+    ctx.beginPath(); ctx.arc(n.x,n.y,base2,0,6.2832);     // Solid white inner ring.
+    ctx.strokeStyle='rgba(255,255,255,'+(.92*a).toFixed(3)+')';
+    ctx.lineWidth=Math.max(1.4,1.9*S*.8); ctx.stroke();
+  }
+  ctx.globalCompositeOperation='source-over';
+  for(const n of N){
+    if(n.h<.02) continue;
+    const r=(n.kind==='label'?Math.hypot(n.bw,n.bh)/2+7:n.r*S*(1+n.h*.5))+(8+n.h*4);
+    ctx.save(); ctx.translate(n.x,n.y); ctx.rotate(t*.35);
+    ctx.strokeStyle='rgba(255,255,255,'+(.36*n.h).toFixed(3)+')';
+    ctx.lineWidth=.9; ctx.setLineDash([2.4,5.6]);
+    ctx.beginPath(); ctx.arc(0,0,r,0,6.2832); ctx.stroke();
+    ctx.setLineDash([]); ctx.restore();
+  }
+  updateCard();
+  requestAnimationFrame(frame);
+}
+function ctl(a,b){
+  const gx=OX+0.5*IW, my2=(a.y+b.y)/2;
+  return [ (a.x+b.x)/2*0.42+gx*0.58, my2*0.8+(OY+0.48*IH)*0.2 ];
+}
+function shape(n,r,t){
+  const x=n.x, y=n.y;
+  ctx.beginPath();
+  if(n.kind==='emotion'||n.kind==='prefer') rrect(x-r,y-r,r*2,r*2,Math.min(r*.4,3));
+  else if(n.kind==='exper'){
+    const h=r*1.1;
+    ctx.moveTo(x,y-h); ctx.lineTo(x+r,y+h*.72); ctx.lineTo(x-r,y+h*.72); ctx.closePath();
+  } else if(n.kind==='user'){
+    ctx.arc(x,y,r,0,6.2832); ctx.fillStyle=hexa(PAL.user,.22); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x,y,r*.6,0,6.2832);
+    ctx.strokeStyle=hexa(PAL.user,.5); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x,y,Math.max(1.6,r*.16),0,6.2832);
+    ctx.fillStyle=hexa(PAL.user,.95); ctx.fill();
+    if(!REDUCED){
+      ctx.globalCompositeOperation='lighter';
+      for(let q=0;q<2;q++){
+        const ph=((t/3.4)+q*.5)%1, rr=r*(1+ph*3), al=(1-ph)*(1-ph)*.35*n.iv;
+        ctx.strokeStyle=hexa(PAL.user,al); ctx.lineWidth=1;
+        ctx.beginPath(); ctx.arc(x,y,rr,0,6.2832); ctx.stroke();
+      }
+      ctx.globalCompositeOperation='source-over';
+    }
+    return;
+  } else ctx.arc(x,y,r,0,6.2832);
+  ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x,y,Math.max(.9,r*.28),0,6.2832);
+  ctx.fillStyle=hexa(PAL[n.kind],Math.min(1,.5+n.h*.5)); ctx.fill();
+}
+function rrect(x,y,w,h,r){
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+function updateCard(){
+  if(sel>=0){
+    const n=N[sel];
+    if(sel!==selPrev){
+      selPrev=sel;
+      cSw.style.borderColor=PAL[n.kind]||'#fff';
+      cId.textContent='#'+String(1000+n.id*7%8999).padStart(4,'0');
+      if(n.kind==='label'){
+        cKd.textContent=n.w;
+        cBody.textContent=SLOT_DESC[n.cluster]||n.cluster;
+        let c=0; for(const m of N) if(m.cluster===n.cluster&&m.kind!=='label') c++;
+        cSrc.textContent=(n.side==='L'?i18n('left'):i18n('right'))+' · '+i18n('memN', c);
+      } else if(n.kind==='user'){
+        cKd.textContent='You · owner';
+        cBody.textContent=i18n('ownerNote');
+        cSrc.textContent='identity · anchor';
+      } else {
+        cKd.textContent=(KIND_CN[n.kind]||n.kind)+' · '+n.cluster;
+        const d=n.detail;
+        let body=(d&&d.full)||n.w;
+        if(d&&d.notes&&d.notes.length){
+          const lines=[];
+          for(let i=0;i<d.notes.length&&i<2;i++){
+            const q=d.notes[i];
+            lines.push((q.emotion?'【'+q.emotion+'】':'')+(q.text||q.cause||''));
+          }
+          if(d.notes.length>2) lines.push(i18n('andMore', d.notes.length-2));
+          body=body+'\n'+lines.join('\n');
+        }
+        cBody.textContent=body;
+        cSrc.textContent=(n.side==='L'?i18n('leftFacts'):i18n('rightProfile'))+((d&&d.src)?(' · '+d.src):'');
+      }
+    }
+    const w=card.offsetWidth, h=card.offsetHeight;
+    cSide=(n.x<W/2)?-1:1;
+    let tx=n.x+(cSide>0?26:-26-w), ty=n.y-h/2;
+    tx=Math.min(Math.max(tx,8),Math.max(8,W-w-8));
+    ty=Math.min(Math.max(ty,8),Math.max(8,H-h-8));
+    cTX=tx; cTY=ty;
+    if(!cOn){ cX=tx; cY=ty; cOn=true; card.classList.add('on'); }
+  } else if(cOn){ cOn=false; card.classList.remove('on'); selPrev=-1; }
+  if(cOn){
+    cX+=(cTX-cX)*.22; cY+=(cTY-cY)*.22;
+    card.style.transform='translate3d('+cX.toFixed(1)+'px,'+cY.toFixed(1)+'px,0)';
+    const n=N[sel];
+    const ax=cSide>0?cX:cX+card.offsetWidth, ay=cY+card.offsetHeight/2;
+    ctx.strokeStyle='rgba(255,255,255,'+(.4*n.h).toFixed(3)+')'; ctx.lineWidth=.9;
+    ctx.beginPath(); ctx.moveTo(n.x+Math.sign(ax-n.x)*(n.r*S+5),n.y);
+    ctx.lineTo(ax-Math.sign(ax-n.x)*3,ay); ctx.stroke();
+  }
+}
+
+base(); resize(); requestAnimationFrame(frame);
+
+return {
+  reset(){ base(); layout(); },
+  add:add, link:link, clusterNode:labelOf, resize:resize,
+  highlight(ids){
+    // Store the hit time; separate batches do not interrupt one another.
+    const now=nowT();
+    for(const n of N) n.hit=0;
+    for(const i of ids) if(N[i]){ N[i].hit=1; N[i].hitT=now; }
+  },
+  beam(from,to){ BEAM=[]; for(const a of from) for(const b of to) if(N[a]&&N[b]) BEAM.push({a:a,b:b});
+                 if(BEAM.length) PULSE.t=-PULSE.trail; },
+  clear(){ for(const n of N){ n.hit=0; n.act=0; } BEAM=[]; },
+  // Debug helper: expose node coordinates in the VMBrain.__dump() console call.
+  __dump(){ return N.map(n=>({id:n.id,side:n.side,kind:n.kind,cluster:n.cluster,
+                              w:n.w,x:n.x,y:n.y,sx:n.sx,sy:n.sy})); }
+};
+})();
+</script>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+  B. Data, interface, and simulation
+   ══════════════════════════════════════════════════════════════════════ */
+(function(){
+const $ = id => document.getElementById(id);
+const app = $('app');
+let toastT=null;
+function toast(m){ const el=$('toast'); el.textContent=m; el.classList.add('on');
+  clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('on'),2200); }
+function trunc(s){ s=String(s||''); return s.length>40?s.slice(0,40)+'…':s; }
+
+/* ── Memory Space state loaded from the backend ─────────────────────── */
+/* The frontend mirrors loadSpaces / loadMemories; demo data is not injected here. */
+const SPACES = {};
+const SPACE_IDS=[];
+
+/* ── Sessions ─────────────────────────────────────────────────────── */
+function blankUI(){ return { input:'', reply:'', speaker:'Tu',
+  tags:{emo:'',ent:'',sch:''}, recallL:[], recallR:[] }; }
+let sessions=[], currentId=0, nextId=1, activeSpace='demo', searchQ='';
+
+
+function findSession(id){ for(const s of sessions) if(s.id===id) return s; return null; }
+function currentSession(){ return findSession(currentId); }
+function spaceSessions(sid){ return sessions.filter(s=>s.space===sid); }
+
+function createSession(spaceId){
+  const s={ id:nextId++, space:spaceId, title:i18n('newChat'), turns:[], ui:blankUI(), named:false };
+  sessions.unshift(s); currentId=s.id;
+  if(activeSpace!==spaceId){ activeSpace=spaceId; buildGraph(spaceId); }
+  else window.VMBrain.clear();
+  renderAll(); $('textIn').focus();
+  return s;
+}
+function selectSession(id){
+  const s=findSession(id); if(!s||id===currentId) return;
+  currentId=id; turnSess=null;
+  if(s.space!==activeSpace){ activeSpace=s.space; buildGraph(s.space); }
+  else window.VMBrain.clear();
+  renderAll();
+}
+/* ── Memory Space: persisted on disk ─────────────────────────────────
+  Space listing, creation, and switching are all handled by the backend. */
+
+/* Merge spaces returned by the backend into SPACES and update their counts. */
+async function loadSpaces(){
+  try{
+    const r=await fetch('/api/spaces'); if(!r.ok) return;
+    const d=await r.json();
+    for(const it of (d.spaces||[])){
+      if(!SPACES[it.id]){
+        SPACES[it.id]={ id:it.id, name:it.name, desc:i18n('diskSpace'),
+                        left:[], right:[], sessions:[] };
+        SPACE_IDS.push(it.id);
+      }
+      SPACES[it.id].count=it.count;
+    }
+    if(d.active && SPACES[d.active]) activeSpace=d.active;
+    fillSpaceSel();
+    renderSpaces();
+  }catch(e){ console.warn('[space] Unable to list spaces', e); }
+}
+
+/* Top-right selector: list all spaces and switch to the selected one. */
+function fillSpaceSel(){
+  const sel=$('spaceSel'); if(!sel) return;
+  sel.innerHTML='';
+  for(const sid of SPACE_IDS){
+    const sp=SPACES[sid], o=document.createElement('option');
+    o.value=sid;
+    o.textContent=sp.name+(sp.count!==undefined?' ('+sp.count+')':'');
+    if(sid===activeSpace) o.selected=true;
+    sel.appendChild(o);
+  }
+}
+if($('spaceSel')) $('spaceSel').addEventListener('change',e=>switchSpace(e.target.value));
+
+/* Top-right plus button: name a space, create its folder, and switch to it. */
+function openSpaceNew(){
+  const el=$('spaceNewName'); if(el){ el.value=''; }
+  const lg=$('spaceNewLang'); if(lg){ lg.value='en'; }   // English by default.
+  $('spaceMask').classList.add('on');
+  setTimeout(()=>el&&el.focus(),50);
+}
+function closeSpaceNew(){ $('spaceMask').classList.remove('on'); }
+
+async function doCreateSpace(){
+  const el=$('spaceNewName'), name=(el.value||'').trim();
+  if(!name){ toast(i18n('needName')); el.focus(); return; }
+  const btn=$('spaceNewOk'); btn.disabled=true; btn.textContent=i18n('spaceCreating');
+  const id=await createSpace(name, ($('spaceNewLang')||{}).value||'en');
+  btn.disabled=false; btn.textContent=i18n('spaceCreate');
+  if(!id) return;                       // createSpace already displayed the reason.
+  closeSpaceNew();
+  fillSpaceSel();
+  await switchSpace(id);                // Switch immediately after creation.
+  toast(i18n('created', name));
+}
+if($('newSpaceBtn'))    $('newSpaceBtn').addEventListener('click', openSpaceNew);
+if($('spaceNewCancel')) $('spaceNewCancel').addEventListener('click', closeSpaceNew);
+if($('spaceNewOk'))     $('spaceNewOk').addEventListener('click', doCreateSpace);
+if($('spaceNewName'))   $('spaceNewName').addEventListener('keydown',e=>{
+  if(e.key==='Enter') doCreateSpace();
+  if(e.key==='Escape') closeSpaceNew();
+});
+if($('spaceMask')) $('spaceMask').addEventListener('click',e=>{
+  if(e.target===$('spaceMask')) closeSpaceNew();     // Close when clicking the overlay.
+});
+
+/* Create an empty Memory Space and its corresponding folder on disk. */
+async function createSpace(name, language){
+  const r=await fetch('/api/spaces',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name, language:language||'en'})});
+  if(!r.ok){
+    const msg=r.status===409?i18n('nameTaken'):(r.status===400?i18n('nameBad'):i18n('createFailed'));
+    toast(msg); return '';
+  }
+  const it=await r.json();
+  if(!SPACES[it.id]){
+    SPACES[it.id]={ id:it.id, name:it.name, desc:i18n('mySpace'),
+                    left:[], right:[], sessions:[], count:0 };
+    SPACE_IDS.push(it.id);
+  }
+  return it.id;
+}
+
+/* Switch backend instances and rebuild the graph for the selected space. */
+async function switchSpace(id){
+  if(!id || id===activeSpace) return;
+  toast(i18n('switching', SPACES[id]?SPACES[id].name:id));
+  try{
+    const r=await fetch('/api/spaces/'+encodeURIComponent(id)+'/use',{method:'POST'});
+    if(!r.ok){ toast(i18n('switchFailed')); return; }
+  }catch(e){ toast(i18n('switchFailed')); return; }
+  activeSpace=id;
+  fillSpaceSel(); renderSpaces(); renderSessions();
+  await loadMemories();                 // Reload memories and rebuild the graph.
+  toast(i18n('switched', SPACES[id]?SPACES[id].name:id));
+}
+
+/* ── Brain graph: render memories by space ────────────────────────── */
+const CLUSTER_KIND={emotion:'emotion',personality:'exper',preference:'prefer'};
+function buildGraph(sid){
+  const sp=SPACES[sid];
+  window.VMBrain.reset();
+  sp.left.forEach(m=>{
+    m.node=window.VMBrain.add('L','entity',trunc(m.text),m.slot,{full:m.text,src:m.slot});
+  });
+  const count={};
+  sp.left.forEach(m=>(m.ents||[]).forEach(e=>count[e]=(count[e]||0)+1));
+  const cap=sp.left.length*0.5, by={};
+  sp.left.forEach(m=>(m.ents||[]).forEach(e=>{
+    if(count[e]<2||count[e]>cap) return;
+    (by[e]=by[e]||[]).push(m.node);
+  }));
+  for(const e in by){ const g=by[e];
+    for(let i=0;i<g.length;i++) for(let j=i+1;j<g.length;j++)
+      window.VMBrain.link(g[i],g[j],'rel',.28); }
+  sp.right.forEach(m=>{
+    // Prefer the backend summary, falling back to the memory text.
+    m.node=window.VMBrain.add('R',CLUSTER_KIND[m.cluster]||'exper',trunc(m.text),m.cluster,
+      {full:m.desc||m.text, notes:m.notes||[], src:m.src||''});
+  });
+  window.VMBrain.clear();
+}
+
+/* ── Rendering ─────────────────────────────────────────────────────── */
+function renderSpaces(){
+  // The space list moved to the top-right badge. Support the old list when present.
+  const badge=$('spaceBadgeName');
+  if(badge){
+    // Include node counts so an empty graph is easy to diagnose.
+    const sp=SPACES[activeSpace];
+    badge.textContent=i18n('badgeStat', sp.name, sp.left.length, sp.right.length);
+  }
+  const brain=$('brainSpace');
+  if(brain){
+    const sp=SPACES[activeSpace];
+    brain.textContent='Memory Space · '+sp.name+
+      i18n('badgeStat', '', sp.left.length, sp.right.length).replace(/^\s*/,'');
+  }
+  const ul=$('spaceList');
+  if(!ul) return;
+  ul.innerHTML='';
+  for(const sid of SPACE_IDS){
+    const sp=SPACES[sid], li=document.createElement('li');
+    if(sid===activeSpace) li.className='on';
+    li.dataset.space=sid;
+    li.innerHTML='<span class="dot"></span><span><span class="nm">'+sp.name+'</span>'+
+      '<span class="sub">'+sp.desc+'<br>'+i18n('spaceStat3', sp.left.length, sp.right.length, spaceSessions(sid).length)+'</span></span>';
+    ul.appendChild(li);
+  }
+}
+function renderSessions(){
+  const ul=$('sessList'); ul.innerHTML='';
+  const q=searchQ.trim().toLowerCase();
+  let list=spaceSessions(activeSpace);
+  if(q) list=list.filter(s=>s.title.toLowerCase().includes(q)||
+                            s.turns.some(t=>t.text.toLowerCase().includes(q)));
+  $('sessCount').textContent=SPACES[activeSpace].name+' · '+list.length;
+  if(!list.length){
+    const d=document.createElement('div'); d.className='side-empty';
+    d.textContent=q?i18n('noMatchInSpace'):i18n('noChatInSpace');
+    ul.appendChild(d); return;
+  }
+  for(const s of list){
+    const li=document.createElement('li');
+    if(s.id===currentId) li.className='on';
+    li.dataset.id=s.id;
+    const t=document.createElement('span'); t.className='t'; t.textContent=s.title;
+    const n=document.createElement('span'); n.className='n';
+    n.textContent=s.turns.length?i18n('turnsN', s.turns.length):'';
+    li.append(t,n); ul.appendChild(li);
+  }
+}
+// Preserve the active caption draft across chat re-renders.
+var liveChatDraft=null, spokenCaption=null;
+function restoreLiveChatDraft(s){
+  if(!s||!spokenCaption||!spokenCaption.active||spokenCaption.session!==s) return;
+  beginLiveChatDraft(s);
+  paintLiveChatDraft(spokenCaption.shown||'');
+}
+function renderChat(){
+  const s=currentSession();
+  $('chatTitle').textContent=s?s.title:i18n('newChat');
+  const csn=$('chatSpaceName');
+  if(csn) csn.textContent=SPACES[s?s.space:activeSpace].name;
+  const box=$('chatLog'); box.innerHTML='';
+  if(!s||!s.turns.length){
+    const e=document.createElement('div'); e.className='empty';
+    e.innerHTML=i18n('startHint', SPACES[s?s.space:activeSpace].name);
+    box.appendChild(e); restoreLiveChatDraft(s); return;
+  }
+  for(const turn of s.turns){
+    const w=document.createElement('div');
+    w.className='turn '+(turn.role==='user'?'user':'ai');
+    const who=document.createElement('div'); who.className='who';
+    who.textContent=turn.role==='user'?(turn.speaker||((LANG==='en')?'You':'Tu')):'VoiceMem';
+    const said=document.createElement('div'); said.className='said'; said.textContent=turn.text;
+    w.append(who,said); box.appendChild(w);
+  }
+  restoreLiveChatDraft(s);
+  box.scrollTop=box.scrollHeight;
+}
+function chip(kind,label,val){
+  const el=document.createElement('span');
+  el.className='tag '+kind+(val?'':' off');
+  const b=document.createElement('b'); b.textContent=label;
+  el.append(b,document.createTextNode(val||'—'));
+  return el;
+}
+// Speaker colors. The default speaker is defined by blankUI(); recognized names use a fallback color.
+const SPK_COLOR={'You':'#6ba7f0','Tu':'#6ba7f0'};
+function renderIO(s){
+  const li=$('liveInput');
+  if(s.ui.input){ li.classList.remove('idle'); li.textContent=s.ui.input; }
+  else { li.classList.add('idle'); li.textContent=i18n('waitingYou'); }
+  const rp=$('reply');
+  rp.textContent=s.ui.reply||i18n('noReplyYet');
+  rp.classList.toggle('idle',!s.ui.reply);
+  const box=$('tags'); box.innerHTML='';
+  box.append(chip('emo','emotion',s.ui.tags.emo),chip('ent','entity',s.ui.tags.ent),
+             chip('sch','schema',s.ui.tags.sch));
+  const spk=s.ui.speaker||((LANG==='en')?'You':'Tu');
+  $('spkNm').textContent=spk;
+  $('spkAv').textContent=spk.slice(0,1);
+  $('spkAv').style.background=SPK_COLOR[spk]||'#9b8cf0';
+  $('spkId').textContent= (spk===i18n('you')||spk==='Tu'||spk==='You') ? i18n('voiceMatched')
+    : 'speaker '+(spk.charCodeAt(0)%7+1)+i18n('voiceKnown', spk);
+  renderRecall('l',s.ui.recallL); renderRecall('r',s.ui.recallR);
+}
+function renderRecall(side,items){
+  const ul=$(side==='r'?'recallR':'recallL'); ul.innerHTML='';
+  if(!items.length){
+    const li=document.createElement('li'); li.className='none';
+    // Several states can produce an empty list, so choose a specific status message.
+    li.textContent = !live ? i18n('notConnected')
+      : (LAST_HITS.at===0 ? i18n('waitRetrieve')
+      : (side==='r' && LAST_HITS.rAll>0 ? i18n('rbInternalOnly', LAST_HITS.rAll)
+      : i18n('noHitThisTurn')));
+    ul.appendChild(li); return;
+  }
+  for(const it of items){
+    const li=document.createElement('li');
+    const a=document.createElement('span'); a.textContent=it.text;
+    const b=document.createElement('span'); b.className='sc'; b.textContent=it.score;
+    li.append(a,b); ul.appendChild(li);
+  }
+}
+function renderAll(){
+  renderSpaces(); renderSessions(); renderChat();
+  renderIO(currentSession()||{ui:blankUI()});
+}
+
+/* ── Sidebar interactions ─────────────────────────────────────────── */
+$('btnCollapse').addEventListener('click',()=>{
+  const c=app.classList.toggle('collapsed');
+  $('btnCollapse').title=c?i18n('expand'):i18n('collapse');
+});
+$('btnSearch').addEventListener('click',()=>{
+  app.classList.remove('collapsed');
+  const w=$('sideSearch'), open=w.classList.toggle('open');
+  if(open) $('searchIn').focus(); else { $('searchIn').value=''; searchQ=''; renderSessions(); }
+});
+$('searchIn').addEventListener('input',e=>{ searchQ=e.target.value; renderSessions(); });
+if($('spaceList')) $('spaceList').addEventListener('click',e=>{
+  const li=e.target.closest('li[data-space]'); if(li) switchSpace(li.dataset.space);
+});
+$('sessList').addEventListener('click',e=>{
+  const li=e.target.closest('li[data-id]'); if(li) selectSession(Number(li.dataset.id));
+});
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){
+    e.preventDefault(); app.classList.remove('collapsed');
+    $('sideSearch').classList.add('open'); $('searchIn').focus();
+  }
+});
+
+/* ── New conversation: choose a space first ───────────────────────── */
+let pickSpace=activeSpace;
+function openModal(){
+  pickSpace=activeSpace;
+  const box=$('pick'); box.innerHTML='';
+  for(const sid of SPACE_IDS){
+    const sp=SPACES[sid], b=document.createElement('button');
+    b.dataset.space=sid; if(sid===pickSpace) b.className='on';
+    b.innerHTML='<span class="dot"></span><span><span class="nm">'+sp.name+'</span>'+
+      '<span class="sub">'+sp.desc+' · '+i18n('spaceStat', sp.left.length, sp.right.length)+'</span></span>';
+    box.appendChild(b);
+  }
+  $('mask').classList.add('on');
+}
+$('btnNew').addEventListener('click',()=>{ app.classList.remove('collapsed'); openModal(); });
+
+/* Create a space from the dialog, select it, then create a conversation there. */
+if($('newSpaceAdd')) $('newSpaceAdd').addEventListener('click',async()=>{
+  const el=$('newSpaceName'), name=(el.value||'').trim();
+  if(!name){ toast(i18n('needName')); el.focus(); return; }
+  const btn=$('newSpaceAdd'); btn.disabled=true; btn.textContent=i18n('spaceCreating');
+  const id=await createSpace(name, ($('spaceNewLang')||{}).value||'en');
+  btn.disabled=false; btn.textContent=i18n('spaceCreate');
+  if(!id) return;
+  el.value=''; pickSpace=id; openModal();
+  toast(i18n('created', name));
+});
+$('pick').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-space]'); if(!b) return;
+  pickSpace=b.dataset.space;
+  $('pick').querySelectorAll('button').forEach(o=>o.classList.toggle('on',o===b));
+});
+$('mCancel').addEventListener('click',()=>$('mask').classList.remove('on'));
+$('mask').addEventListener('click',e=>{ if(e.target===$('mask')) $('mask').classList.remove('on'); });
+$('mCreate').addEventListener('click',()=>{
+  $('mask').classList.remove('on');
+  createSession(pickSpace);
+  toast(i18n('createdIn', SPACES[pickSpace].name));
+});
+
+/* ── Chat / Memory Space toggle ───────────────────────────────────── */
+const seg=$('seg'), track=$('track');
+seg.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+  const mem=b.dataset.v==='mem';
+  seg.classList.toggle('mem',mem); track.classList.toggle('mem',mem);
+  seg.querySelectorAll('button').forEach(o=>o.classList.toggle('on',o===b));
+  if(mem) setTimeout(window.VMBrain.resize,60);
+}));
+
+/* ── Export ───────────────────────────────────────────────────────── */
+function saveFile(text,name,mime){
+  const url=URL.createObjectURL(new Blob([text],{type:mime}));
+  const a=document.createElement('a'); a.href=url; a.download=name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),800);
+}
+function stamp(){ const d=new Date(), p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'+p(d.getHours())+p(d.getMinutes()); }
+$('dlBtn').addEventListener('click',async()=>{
+  const scope=$('dlScope').value, sp=SPACES[activeSpace];
+  if(scope==='chat'){
+    const s=currentSession();
+    if(!s||!s.turns.length){ toast(i18n('emptyChat')); return; }
+    const md='# '+s.title+'\n\n> Memory Space: '+sp.name+'\n\n'+
+      s.turns.map(t=>(t.role==='user'?('**'+(t.speaker||i18n('you'))+'**\n\n'):'**VoiceMem**\n\n')+t.text)
+        .join('\n\n---\n\n');
+    saveFile(md,'voicemem-'+sp.id+'-chat-'+stamp()+'.md','text/markdown');
+    toast(i18n('downloadedChat')); return;
+  }
+  let left=sp.left, right=sp.right;
+  try{ const r=await fetch('/api/memories?space='+sp.id);
+       if(r.ok){ const m=await r.json(); left=m.left||left; right=m.right||right; } }catch(e){}
+  const out={exported_at:new Date().toISOString(), space:sp.id, space_name:sp.name};
+  if(scope!=='right') out.left_brain=left;
+  if(scope!=='left')  out.right_brain=right;
+  const n=(out.left_brain||[]).length+(out.right_brain||[]).length;
+  if(!n){ toast(i18n('noMemInSpace')); return; }
+  saveFile(JSON.stringify(out,null,2),'voicemem-'+sp.id+'-'+scope+'-'+stamp()+'.json','application/json');
+  toast(i18n('downloadedN', n, sp.name));
+});
+
+/* ── Voice state / waveform / level / orb ────────────────────────── */
+const voice=$('voice'), voiceLab=$('voiceLab');
+const LAB={idle:i18n('idle'),user:i18n('listening'),ai:i18n('replying'),paused:i18n('paused')};
+function setVoice(s){
+  voice.className='voice'+(s==='ai'?' ai':s==='user'?' user':'');
+  voiceLab.textContent=LAB[s]||s;
+  $('spk').classList.toggle('live',s==='user');
+}
+const wave=$('wave'), wc=wave.getContext('2d');
+let vt=0, amp=0, aiSpeaking=false, lvOn=false;
+function sizeWave(){ const r=wave.getBoundingClientRect(), d=Math.min(2,window.devicePixelRatio||1);
+  wave.width=Math.max(1,r.width*d); wave.height=Math.max(1,r.height*d); wc.setTransform(d,0,0,d,0,0); }
+new ResizeObserver(sizeWave).observe(wave); sizeWave();
+(function waveFrame(){
+  vt+=.06; const w=wave.clientWidth||96,h=wave.clientHeight||24,mid=h/2;
+  amp+=((aiSpeaking?1:0)-amp)*.12;
+  wc.clearRect(0,0,w,h); wc.beginPath();
+  for(let x=0;x<=w;x++){
+    const env=Math.sin(x/w*Math.PI);
+    const y=mid+Math.sin(x*.14-vt*2.2)*env*(h*.4)*amp*(.5+.5*Math.sin(vt*1.7+x*.05));
+    x?wc.lineTo(x,y):wc.moveTo(x,y);
+  }
+  wc.strokeStyle='rgba(121,215,162,'+(.3+.5*amp).toFixed(2)+')'; wc.lineWidth=1.5; wc.stroke();
+  requestAnimationFrame(waveFrame);
+})();
+const lvBars=Array.prototype.slice.call($('spkLv').querySelectorAll('i'));
+setInterval(()=>{ lvBars.forEach(b=>b.style.height=(lvOn?4+Math.random()*10:4)+'px'); },110);
+
+const ORB={strands:3,lines:7,points:88,spacing:.06,base:.34,shrink:.45,
+  idleAmp:.14,liveAmp:1.0,idleSpeed:.10,liveSpeed:.5,rot:.5,liveRot:1.2,
+  spread:.3,lw:1.1,squish:.88,halo:5,haloA:.34,mid:2,midA:.42,
+  dark:[58,116,220],light:[150,205,245]};
+let orbLevel=0,orbPhase=0,orbRot=0;
+const orbGlow=document.createElement('canvas');
+function orbPoint(th,t,si,R,a,sq){
+  const ph=(si/ORB.strands)*Math.PI*2;
+  const r=R*(1+a*(.4*Math.sin(3*th+ph+t)+.24*Math.sin(5*th-ph*2+t*.6)+.16*Math.sin(2*th+ph*1.5-t*1.4)));
+  const wob=.09*R*a*Math.sin(4*th-t*1.8+ph);
+  return {x:r*Math.cos(th)+wob*Math.cos(th+Math.PI/2), y:r*Math.sin(th)*sq+wob*Math.sin(th+Math.PI/2)};
+}
+(function startOrb(){
+  const cvs=$('orb'), c=cvs.getContext('2d'), W=cvs.width, H=cvs.height;
+  orbGlow.width=W; orbGlow.height=H; const g=orbGlow.getContext('2d');
+  let last=performance.now(), acc=0;
+  (function f(now){
+    requestAnimationFrame(f);
+    const dt=Math.min((now-last)/1000,.1); last=now; acc+=dt;
+    if(orbLevel<.03&&acc<.05) return; acc=0;
+    const want=aiSpeaking?.55:(lvOn?.85:0);
+    orbLevel+=(want-orbLevel)*(want>orbLevel?.2:.05);
+    const a=ORB.idleAmp+(ORB.liveAmp-ORB.idleAmp)*orbLevel;
+    const sq=1-(1-ORB.squish)*orbLevel;
+    orbPhase+=dt*(ORB.idleSpeed+(ORB.liveSpeed-ORB.idleSpeed)*orbLevel);
+    orbRot+=dt*(ORB.rot+(ORB.liveRot-ORB.rot)*orbLevel);
+    const R=Math.min(W,H)*ORB.base*(1-ORB.shrink*orbLevel);
+    g.clearRect(0,0,W,H); g.save(); g.translate(W/2,H/2); g.rotate(orbRot);
+    const grad=g.createRadialGradient(0,0,0,0,0,R*2.1);
+    grad.addColorStop(0,'rgba('+ORB.dark+',1)');
+    grad.addColorStop(.55,'rgba('+ORB.dark+',1)');
+    grad.addColorStop(1,'rgba('+ORB.light+',1)');
+    const M=ORB.lines, half=(M-1)/2, sp=R*ORB.spacing;
+    g.strokeStyle=grad; g.lineWidth=ORB.lw; g.lineJoin='round'; g.lineCap='round';
+    for(let si=0;si<ORB.strands;si++){
+      const spin=orbRot*ORB.spread*si, cs=Math.cos(spin), sn=Math.sin(spin);
+      for(let k=0;k<M;k++){
+        const Rk=R+(k-half)*sp, edge=1-Math.abs(k-half)/(half+.001);
+        g.beginPath();
+        for(let i=0;i<=ORB.points;i++){
+          const th=(i/ORB.points)*Math.PI*2, p=orbPoint(th,orbPhase,si,Rk,a,sq);
+          const x=p.x*cs-p.y*sn, y=p.x*sn+p.y*cs;
+          i?g.lineTo(x,y):g.moveTo(x,y);
+        }
+        g.globalAlpha=.5+.5*edge; g.stroke();
+      }
+    }
+    g.globalAlpha=1; g.restore();
+    c.clearRect(0,0,W,H); c.save(); c.translate(W/2,H/2);
+    const bg=c.createRadialGradient(0,0,0,0,0,R*2.1);
+    bg.addColorStop(0,'rgba(60,130,255,'+(.2+.28*orbLevel)+')');
+    bg.addColorStop(.5,'rgba(30,70,190,'+(.09+.13*orbLevel)+')');
+    bg.addColorStop(1,'rgba(0,0,0,0)');
+    c.fillStyle=bg; c.beginPath(); c.arc(0,0,R*2.1,0,Math.PI*2); c.fill(); c.restore();
+    c.save(); c.globalCompositeOperation='lighter';
+    c.filter='blur('+ORB.halo+'px)'; c.globalAlpha=ORB.haloA; c.drawImage(orbGlow,0,0);
+    c.filter='blur('+ORB.mid+'px)';  c.globalAlpha=ORB.midA;  c.drawImage(orbGlow,0,0);
+    c.filter='none'; c.globalAlpha=1; c.drawImage(orbGlow,0,0); c.restore();
+  })(last);
+})();
+
+/* ── One response turn (shared by simulation and typing) ─────────── */
+let busy=false, turnSess=null;
+function addTurn(s,role,text,speaker){
+  s.turns.push({role,text,speaker});
+  if(role==='user'&&!s.named){ s.title=text.length>20?text.slice(0,20)+'…':text; s.named=true; }
+  renderSessions(); if(s===currentSession()) renderChat();
+}
+function paint(s){ if(s===currentSession()) renderIO(s); }
+function applyHits(s,sp,ex){
+  const L=(ex.left||[]).map((i,k)=>({m:sp.left[i],score:(0.88-k*0.09).toFixed(2)})).filter(x=>x.m);
+  const R=(ex.right||[]).map((i,k)=>({m:sp.right[i],score:(0.82-k*0.11).toFixed(2)})).filter(x=>x.m);
+  s.ui.recallL=L.map(x=>({text:trunc(x.m.text),score:x.score}));
+  s.ui.recallR=R.map(x=>({text:trunc(x.m.text),score:x.score}));
+  paint(s);
+  const li=L.map(x=>x.m.node).filter(v=>v!==undefined);
+  const ri=R.map(x=>x.m.node).filter(v=>v!==undefined);
+  window.VMBrain.highlight(li.concat(ri));
+  window.VMBrain.beam(li,ri);
+}
+
+
+/* ── Text input ───────────────────────────────────────────────────── */
+$('textIn').addEventListener('keydown',e=>{
+  if(e.key!=='Enter') return;
+  const t=e.target.value.trim(); if(!t) return;
+  e.target.value='';
+  // With no sessions, currentSession() is null; create one before sending text.
+  let s=currentSession();
+  if(live&&ws&&ws.readyState===1){          // Use the live backend when connected.
+    if(!s) s=createSession(activeSpace);
+    s.ui.input=t; s.ui.speaker=i18n('you'); paint(s);
+    ws.send(JSON.stringify({type:'user_text',text:t}));
+    return;
+  }
+  // Do not fabricate a reply without the backend; report that the connection is required.
+  toast(i18n('notConnected'));
+});
+
+/* ── Real backend ─────────────────────────────────────────────────── */
+const params=new URLSearchParams(location.search);
+// Follow the page address instead of hard-coding a port.
+//
+// location.host already includes the port locally and works behind a reverse proxy.
+// Use ?ws=host:port when frontend and backend run separately.
+const WS_HOST=params.get('ws')||location.host||'localhost:8787';
+const WS_URL=(location.protocol==='https:'?'wss://':'ws://')+WS_HOST+'/ws';
+const SAMPLE_RATE=24000;          // Must match MIC_RATE in run.py.
+let ws=null, live=false, paused=false;
+
+/* --- Playback ------------------------------------------------------ */
+/* Continuous PCM playback with adaptive jitter buffering. */
+let playCtx=null, pcmNode=null, pcmReady=null, pcmPending=[], pcmDrainPending=false;
+let pcmStreaming=false, pcmDrainWaiters=[], pcmPrebuffer=0.08, pcmWorkletFailed=false;
+let pcmBargePaused=false, pcmOutputId='', pcmOutputSampleRate=SAMPLE_RATE;
+let scheduled=[], nextPlay=0;             // Used for complete AudioBuffer playback.
+
+function resolvePcmDrain(){
+  pcmStreaming=false;
+  for(const done of pcmDrainWaiters.splice(0)) done();
+}
+function configurePcmPlayer(){
+  if(pcmNode) pcmNode.port.postMessage({type:'config',prebuffer:pcmPrebuffer});
+}
+function reportPlaybackCheckpoint(m){
+  if(!m.outputId||!ws||ws.readyState!==WebSocket.OPEN) return;
+  const state={buffer:'playing',started:'playing',resumed:'playing',
+               paused:'paused',underflow:'stalled',drained:'drained',
+               interrupted:'interrupted'}[m.type]||m.type;
+  try{
+    ws.send(JSON.stringify({type:'playback_checkpoint',output_id:m.outputId,
+      rendered_samples:Number(m.renderedSamples||0),sample_rate:Number(m.sampleRate||SAMPLE_RATE),
+      buffered_samples:Math.round(Number(m.bufferedMs||0)*Number(m.sampleRate||SAMPLE_RATE)/1000),
+      state}));
+  }catch(e){}
+}
+function beginPcmOutput(outputId,sampleRate=SAMPLE_RATE){
+  pcmOutputId=String(outputId||'');
+  pcmOutputSampleRate=Number(sampleRate||SAMPLE_RATE);
+  if(pcmNode) pcmNode.port.postMessage({type:'start',outputId:pcmOutputId,
+                                       sampleRate:pcmOutputSampleRate});
+}
+function initPcmPlayer(){
+  if(pcmReady||!playCtx) return pcmReady;
+  if(!playCtx.audioWorklet){ pcmWorkletFailed=true; return Promise.resolve(); }
+  pcmReady=playCtx.audioWorklet.addModule('/pcm-player-worklet.js').then(()=>{
+    pcmNode=new AudioWorkletNode(playCtx,'voicemem-pcm-player',{outputChannelCount:[1]});
+    pcmNode.connect(playCtx.destination);
+    pcmNode.port.onmessage=e=>{
+      const m=e.data||{};
+      reportPlaybackCheckpoint(m);
+      if(m.type==='started') setSpokenCaptionPlaying(true);
+      else if(m.type==='drained'){
+        setSpokenCaptionPlaying(false);
+        resolvePcmDrain();
+      }else if(m.type==='underflow'){
+        setSpokenCaptionPlaying(false);
+        if(window.VM_DEBUG) console.debug('[audio] Adaptive buffer',m.targetMs+'ms');
+      }
+    };
+    configurePcmPlayer();
+    if(pcmOutputId) pcmNode.port.postMessage({type:'start',outputId:pcmOutputId,
+                                             sampleRate:pcmOutputSampleRate});
+    if(pcmBargePaused) pcmNode.port.postMessage({type:'pause'});
+    for(const item of pcmPending.splice(0)) enqueuePcm(item.samples,item.sourceFrames);
+    if(pcmDrainPending){ pcmDrainPending=false; pcmNode.port.postMessage({type:'drain'}); }
+  }).catch(e=>{
+    pcmWorkletFailed=true; pcmReady=null;
+    console.warn('[audio] AudioWorklet unavailable; falling back to legacy player',e);
+    for(const item of pcmPending.splice(0)) legacyPlayPcm(item.samples);
+    if(pcmDrainPending){ pcmDrainPending=false; resolvePcmDrain(); }
+  });
+  return pcmReady;
+}
+function ensurePlayback(){
+  if(!playCtx){
+    playCtx=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
+    initPcmPlayer();
+  }
+  if(playCtx.state==='suspended') playCtx.resume();
+  return playCtx;
+}
+function legacyPlayPcm(f32){
+  if(!playCtx||!f32.length) return;
+  const b=playCtx.createBuffer(1,f32.length,playCtx.sampleRate); b.copyToChannel(f32,0);
+  const s=playCtx.createBufferSource(); s.buffer=b; s.connect(playCtx.destination);
+  scheduled.push(s); s.onended=()=>{ const i=scheduled.indexOf(s); if(i>=0) scheduled.splice(i,1); };
+  const now=playCtx.currentTime, at=nextPlay>now?nextPlay:now+pcmPrebuffer;
+  s.start(at); nextPlay=at+b.duration;
+}
+function enqueuePcm(f32,sourceFrames){
+  if(!pcmNode){ pcmPending.push({samples:f32,sourceFrames}); return; }
+  pcmNode.port.postMessage({type:'audio',samples:f32,sourceFrames},[f32.buffer]);
+}
+function playPcm(buf){
+  const ctx=ensurePlayback();
+  if(buf.byteLength<2) return;
+  const even=buf.byteLength-(buf.byteLength%2);
+  const i16=new Int16Array(buf,0,even/2), native=new Float32Array(i16.length);
+  for(let i=0;i<i16.length;i++) native[i]=i16[i]/32768;
+  // Match PCM samples to the AudioContext rate.
+  const f32=ctx.sampleRate===SAMPLE_RATE?native:resampleLinear(native,SAMPLE_RATE,ctx.sampleRate);
+  pcmStreaming=true;
+  if(pcmWorkletFailed) legacyPlayPcm(f32); else enqueuePcm(f32,i16.length);
+}
+function finishPcmStream(){
+  if(pcmWorkletFailed){ resolvePcmDrain(); return; }
+  if(pcmNode) pcmNode.port.postMessage({type:'drain'}); else pcmDrainPending=true;
+}
+function waitForPcmDrain(maxMs=20000){
+  if(!pcmStreaming) return Promise.resolve();
+  return new Promise(resolve=>{
+    let done=false;
+    const finish=()=>{ if(done)return; done=true; clearTimeout(timer); resolve(); };
+    const timer=setTimeout(finish,maxMs);
+    pcmDrainWaiters.push(finish);
+  });
+}
+function stopPlayback(reason='reset'){
+  setSpokenCaptionPlaying(false);
+  pcmBargePaused=false;
+  pcmPending.length=0; pcmDrainPending=false;
+  if(pcmNode) pcmNode.port.postMessage({type:'clear',reason});
+  pcmOutputId='';
+  resolvePcmDrain();
+  for(const s of scheduled.splice(0)){ try{ s.stop(); }catch(e){} }
+  releaseMic();                 // Stop the microphone when playback is interrupted.
+  if(playCtx) nextPlay=playCtx.currentTime;
+}
+function pausePlaybackForBarge(){
+  if(pcmBargePaused) return;
+  pcmBargePaused=true; setSpokenCaptionPlaying(false);
+  if(pcmNode) pcmNode.port.postMessage({type:'pause'});
+  else if(playCtx) playCtx.suspend();
+}
+function resumePlaybackAfterBarge(){
+  if(!pcmBargePaused) return;
+  pcmBargePaused=false;
+  if(pcmNode) pcmNode.port.postMessage({type:'resume'});
+  else if(playCtx) playCtx.resume();
+  setSpokenCaptionPlaying(true);
+}
+
+/* --- Microphone ---------------------------------------------------- */
+// Whether to mute the microphone while the assistant speaks (half duplex).
+//
+// Browser echo cancellation may not fully suppress speaker output. Half duplex
+// prevents self-interruption, but disables barge-in, so it is off by default.
+const HALF_DUPLEX = localStorage.getItem('vm-half-duplex') === '1';
+// Keep the microphone muted briefly after scheduled audio ends.
+const AEC_TAIL_S = 0.25;
+// Check whether the assistant is still audible; queued audio can outlast answer_done.
+function assistantAudible(){
+  return !!playCtx && playCtx.currentTime < nextPlay + AEC_TAIL_S;
+}
+let micStream=null, micCtx=null, micProc=null;
+function toPCM16(f32){
+  const o=new Int16Array(f32.length);
+  for(let i=0;i<f32.length;i++){ const s=Math.max(-1,Math.min(1,f32[i])); o[i]=s<0?s*0x8000:s*0x7fff; }
+  return o;
+}
+function downsample(f32,from,to){
+  if(from===to) return f32;
+  const ratio=from/to, out=new Float32Array(Math.floor(f32.length/ratio));
+  for(let i=0;i<out.length;i++) out[i]=f32[Math.floor(i*ratio)];
+  return out;
+}
+function resampleLinear(f32,from,to){
+  if(from===to) return f32;
+  const ratio=from/to, out=new Float32Array(Math.max(1,Math.round(f32.length/ratio)));
+  for(let i=0;i<out.length;i++){
+    const p=i*ratio, a=Math.floor(p), b=Math.min(a+1,f32.length-1), t=p-a;
+    out[i]=f32[a]*(1-t)+f32[b]*t;
+  }
+  return out;
+}
+async function startMic(){
+  micStream=await navigator.mediaDevices.getUserMedia(
+    {audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+  if(!micCtx) micCtx=new (window.AudioContext||window.webkitAudioContext)();
+  if(micCtx.state==='suspended') await micCtx.resume();
+  const src=micCtx.createMediaStreamSource(micStream);
+  // Smaller capture blocks reduce uplink latency.
+  micProc=micCtx.createScriptProcessor(2048,1,1);
+  micProc.onaudioprocess=e=>{
+    if(!ws||ws.readyState!==1||paused||replaying) return;
+    if(HALF_DUPLEX && assistantAudible()) return;   // Mute during assistant playback.
+    const f32=e.inputBuffer.getChannelData(0);
+    let peak=0; for(let i=0;i<f32.length;i++){ const v=Math.abs(f32[i]); if(v>peak) peak=v; }
+    lvOn=peak>0.02;
+    ws.send(toPCM16(downsample(f32,micCtx.sampleRate,SAMPLE_RATE)).buffer);
+  };
+  src.connect(micProc); micProc.connect(micCtx.destination);
+}
+function stopMic(){
+  if(micProc){ micProc.disconnect(); micProc.onaudioprocess=null; micProc=null; }
+  if(micStream){ for(const t of micStream.getTracks()) t.stop(); micStream=null; }
+  lvOn=false;
+}
+
+/* --- Backend memories in an independent space ---------------------
+  Real data is kept separate from demo spaces and activeSpace tracks the
+  backend-selected space directly. */
+function ensureSpaceObj(id){
+  if(SPACES[id]) return;
+  SPACES[id]={id, name:id, desc:i18n('diskSpace'),
+              left:[], right:[], sessions:[]};
+  if(!SPACE_IDS.includes(id)) SPACE_IDS.push(id);
+}
+
+async function loadMemories(){
+  ensureSpaceObj(activeSpace);
+  let m;
+  try{
+    const r=await fetch('/api/memories');
+    if(!r.ok) return;
+    m=await r.json();
+  }catch(e){ return; }
+  const sp=SPACES[activeSpace];
+
+  // Compare note counts before and after refresh so updated nodes can be highlighted.
+  const before={};
+  for(const x of sp.left)  before['L:'+x.text]=1;
+  for(const x of sp.right) before['R:'+x.text]=(x.notes||[]).length;
+
+  // Keep one consistent structure for graph nodes and cards:
+  // left {text, slot, ents}; right {text, cluster, src, desc, notes}.
+  sp.left=(m.left||[]).map(x=>({text:x.text,slot:x.slot||'daily_life',ents:x.entities||[]}));
+  sp.right=(m.right||[]).map(x=>{
+    const notes=x.notes||[];
+    const src=(x.slot||'')+(notes.length?' ×'+notes.length:'');
+    // Normalize backend experience categories to the three UI anchors.
+    let cl=x.cluster||'personality';
+    if(cl!=='emotion'&&cl!=='preference') cl='personality';
+    return {text:x.text,cluster:cl,src:src,desc:x.desc||'',notes:notes};
+  });
+
+  const grew=[];
+  sp.left.forEach((x,i)=>{ if(!before['L:'+x.text]) grew.push(['L',i]); });
+
+  // memory_hits arrives before extraction, so it is only a temporary approximation.
+  // Replace it with entities produced by the same LLM call as fact and slot extraction.
+  const fresh=grew.filter(g=>g[0]==='L').map(g=>sp.left[g[1]]).filter(x=>!x.hit);
+  if(fresh.length){
+    const ents=[];
+    fresh.forEach(x=>(x.ents||[]).forEach(e=>{ if(e&&ents.indexOf(e)<0) ents.push(e); }));
+    // Only update the turn that initiated this request; stale responses must not
+    // overwrite the labels of a newer turn.
+    const cur=currentSession();
+    if(cur&&ents.length&&watchTurn===turnSeq){
+      cur.ui.tags.ent=ents.slice(0,6).join('、'); paint(cur);
+    }
+  }
+  sp.right.forEach((x,i)=>{
+    const was=before['R:'+x.text];
+    if(was===undefined || (x.notes||[]).length>was) grew.push(['R',i]);
+  });
+
+
+  console.log('[vm] loadMemories: left='+sp.left.length+' right='+sp.right.length+'; rebuilding graph');
+  buildGraph(activeSpace); renderAll();
+
+  // Node indexes are valid only after buildGraph.
+  const ids=[];
+  for(const [side,i] of grew){
+    const item=(side==='L'?sp.left:sp.right)[i];
+    if(item && item.node!==undefined) ids.push(item.node);
+  }
+  if(ids.length){
+    window.VMBrain.highlight(ids);
+    setTimeout(()=>window.VMBrain.clear(), 2600);
+  }
+}
+
+/* Map a backend hit to its graph node. */
+function leftNodesOf(hits){
+  const sp=SPACES[activeSpace]; if(!sp) return [];
+  const out=[];
+  for(const h of hits){
+    const i=sp.left.findIndex(m=>m.text===h.text);
+    if(i>=0&&sp.left[i].node!==undefined) out.push(sp.left[i].node);
+  }
+  return out;
+}
+/* Backend content may contain a date and warning prefix; strip it before matching. */
+function bareNote(s){
+  return String(s||'')
+    .replace(/^\s*\[[^\]]*\]\s*/,'')      // [2026-08-22]
+    .replace(/^[⚠✱*\s]+/,'')              // ⚠
+    .replace(/^[^：:]{2,8}[：:]\s*/,'')    // Remove the duplicate-warning prefix.
+    .trim();
+}
+function rightNodesOf(hits){
+  const sp=SPACES[activeSpace]; if(!sp) return [];
+  const out=[];
+  for(const h of hits){
+    const c=bareNote(h.raw||h.content);   // raw may contain the original prefix.
+    if(!c) continue;
+    // A memory can belong to several nodes; prefer the node with the fewest notes.
+    const cands=[];
+    sp.right.forEach((m,k)=>{
+      if((m.notes||[]).some(n=>{
+        const t=bareNote(n.text);
+        return t&&(t===c||t.indexOf(c)>=0||c.indexOf(t)>=0);
+      })) cands.push(k);
+    });
+    cands.sort((a,b)=>(sp.right[a].notes||[]).length-(sp.right[b].notes||[]).length);
+    let i = cands.length ? cands[0] : -1;
+    // If no concrete note is attached, fall back to entity name or description.
+    if(i<0) i=sp.right.findIndex(m=>m.text&&c.indexOf(m.text)>=0);
+    if(i>=0&&sp.right[i].node!==undefined&&out.indexOf(sp.right[i].node)<0){
+      out.push(sp.right[i].node); continue;
+    }
+    // Profile hits are slot-level and have no entity node; highlight the slot node.
+    if(h.slot){
+      sp.right.forEach(m=>{
+        if(m.node!==undefined && (m.src||'').indexOf(h.slot)===0
+           && out.indexOf(m.node)<0) out.push(m.node);
+      });
+    }
+  }
+  return out;
+}
+
+/* --- Message handling ---------------------------------------------- */
+let liveReply='', pendingMemoryClip='';
+let replyPlaybackGeneration=0;
+spokenCaption={session:null,target:'',shown:'',index:0,budget:0,playing:false,
+               active:false,frame:0,lastAt:0};
+function beginLiveChatDraft(s){
+  if(!s||s!==currentSession()) return;
+  const box=$('chatLog');
+  const empty=box.querySelector('.empty'); if(empty) empty.remove();
+  if(liveChatDraft&&liveChatDraft.wrap.isConnected) liveChatDraft.wrap.remove();
+  const wrap=document.createElement('div'); wrap.className='turn ai streaming';
+  const who=document.createElement('div'); who.className='who'; who.textContent='VoiceMem';
+  const said=document.createElement('div'); said.className='said'; said.textContent='';
+  wrap.append(who,said); box.appendChild(wrap); box.scrollTop=box.scrollHeight;
+  liveChatDraft={sessionId:s.id,wrap,said,box};
+}
+function paintLiveChatDraft(text){
+  const draft=liveChatDraft;
+  if(!draft||!draft.wrap.isConnected) return;
+  draft.said.textContent=text;
+  draft.box.scrollTop=draft.box.scrollHeight;
+}
+function paintSpokenCaption(text){
+  const s=spokenCaption.session;
+  if(s){
+    s.ui.reply=text;
+    if(s===currentSession()){
+      const rp=$('reply');
+      rp.textContent=text||i18n('noReplyYet');
+      rp.classList.toggle('idle',!text);
+    }
+  }
+  paintLiveChatDraft(text);
+}
+function finishLiveChatDraft(s,text){
+  if(spokenCaption&&spokenCaption.session===s) spokenCaption.active=false;
+  if(liveChatDraft&&liveChatDraft.sessionId===s.id) liveChatDraft=null;
+  if(text) addTurn(s,'ai',text); else if(s===currentSession()) renderChat();
+}
+function captionCost(ch){
+  if(/[\u3400-\u9fff\uf900-\ufaff]/.test(ch)) return 1;
+  if(/[。！？!?]/.test(ch)) return 1.15;
+  if(/[，、；;：:,.]/.test(ch)) return .55;
+  if(/\s/.test(ch)) return .16;
+  return .34;                              // Latin text is timed by word rather than character.
+}
+function resetSpokenCaption(s){
+  if(spokenCaption.frame) cancelAnimationFrame(spokenCaption.frame);
+  spokenCaption={session:s,target:'',shown:'',index:0,budget:0,playing:false,
+                 active:true,frame:0,lastAt:performance.now()};
+  paintSpokenCaption('');
+}
+function setSpokenCaptionTarget(text){
+  spokenCaption.target=text||'';
+  if(spokenCaption.playing) scheduleSpokenCaption();
+}
+function setSpokenCaptionPlaying(playing){
+  spokenCaption.playing=!!playing;
+  spokenCaption.lastAt=performance.now();
+  if(playing) scheduleSpokenCaption();
+  else if(spokenCaption.frame){ cancelAnimationFrame(spokenCaption.frame); spokenCaption.frame=0; }
+}
+function scheduleSpokenCaption(){
+  if(!spokenCaption.frame&&spokenCaption.playing)
+    spokenCaption.frame=requestAnimationFrame(stepSpokenCaption);
+}
+function stepSpokenCaption(now){
+  spokenCaption.frame=0;
+  if(!spokenCaption.playing) return;
+  const dt=Math.min(.12,Math.max(0,(now-spokenCaption.lastAt)/1000));
+  spokenCaption.lastAt=now;
+  // Weight punctuation and Latin text to approximate spoken pacing.
+  spokenCaption.budget+=dt*5.2;
+  const chars=Array.from(spokenCaption.target);
+  let changed=false;
+  while(spokenCaption.index<chars.length){
+    const cost=captionCost(chars[spokenCaption.index]);
+    if(spokenCaption.budget<cost) break;
+    spokenCaption.budget-=cost;
+    spokenCaption.index++; changed=true;
+  }
+  if(changed){
+    spokenCaption.shown=chars.slice(0,spokenCaption.index).join('');
+    paintSpokenCaption(spokenCaption.shown);
+  }
+  scheduleSpokenCaption();
+}
+function completeSpokenCaption(text){
+  setSpokenCaptionPlaying(false);
+  spokenCaption.target=text||spokenCaption.target;
+  spokenCaption.shown=spokenCaption.target;
+  spokenCaption.index=Array.from(spokenCaption.target).length;
+  paintSpokenCaption(spokenCaption.shown);
+  return spokenCaption.shown;
+}
+function handle(m){
+  if(window.VM_DEBUG) console.log('[vm]', m.type, m);
+  const s=currentSession();
+  if(!s){ console.warn('[vm] Received '+m.type+' without an active session; ignored'); return; }
+  switch(m.type){
+    case 'session_ready':
+      // Chained TTS uses a larger initial jitter buffer.
+      pcmPrebuffer=m.mode==='realtime'?0.08:0.16;
+      configurePcmPlayer();
+      toast(i18n('connected', m.mode||'')); break;
+
+    case 'partial_transcript':
+      setVoice('user'); s.ui.input=m.text; paint(s); break;
+
+    case 'user_transcript':
+      // Start a new turn by clearing labels; extraction fills them after ingest.
+      s.ui.tags={emo:'',ent:'',sch:''};
+      lvOn=false; s.ui.input=m.text; paint(s);
+      addTurn(s,'user',m.text,s.ui.speaker||i18n('you')); break;
+
+    case 'memory_hits': {
+      const L=m.left_brain||[], R=m.right_brain_hits||[];
+      s.ui.tags={emo:m.emotion||'',
+                 ent:(m.entities||[]).join('、'),
+                 sch:(m.slots||[]).join('、')};
+      s.ui.recallL=L.map(h=>({text:trunc(h.text),score:Number(h.score||0).toFixed(2)}));
+      s.ui.recallR=R.filter(h=>!h.internal)
+                    .map(h=>({text:trunc(h.content),score:Number(h.priority||0).toFixed(2)}));
+      paint(s);
+      LAST_HITS={at:Date.now(), l:L.length, rAll:R.length,
+                 r:R.filter(h=>!h.internal).length};
+      const li=leftNodesOf(L), ri=rightNodesOf(R);
+      const sp=SPACES[activeSpace];
+      console.log('[vm] graph: space left='+(sp?sp.left.length:'?')+'/right='+(sp?sp.right.length:'?')+
+          ' nodes; hits left='+li.length+'/right='+ri.length+
+          (ri.length?'':'  <- no right-side node to highlight'));
+      window.VMBrain.highlight(li.concat(ri));
+      window.VMBrain.beam(li,ri);
+      break;
+    }
+
+    case 'answer_start':
+      // Clear queued audio from the previous turn before starting the next response.
+      stopPlayback('reset');
+      beginPcmOutput(m.output_id,m.sample_rate);
+      replyPlaybackGeneration++;
+      setVoice('ai'); aiSpeaking=true; liveReply=''; s.ui.reply=''; paint(s);
+      beginLiveChatDraft(s);
+      resetSpokenCaption(s);
+      ensurePlayback(); break;
+
+    case 'answer_delta':
+      // Advance both captions on the playback clock.
+      liveReply+=m.text;
+      setSpokenCaptionTarget(liveReply); break;
+
+    case 'answer_pause':
+      pausePlaybackForBarge(); setVoice('user'); break;
+
+    case 'answer_resume':
+      resumePlaybackAfterBarge(); setVoice('ai'); break;
+
+    case 'answer_done':
+      finishPcmStream();
+      const playbackGeneration=replyPlaybackGeneration;
+      const completedReply=liveReply;
+      liveReply='';
+      const memoryClip=pendingMemoryClip; pendingMemoryClip='';
+      waitForPcmDrain().then(()=>{
+        if(playbackGeneration!==replyPlaybackGeneration) return;
+        completeSpokenCaption(completedReply);
+        finishLiveChatDraft(s,completedReply);
+        aiSpeaking=false; setVoice('idle');
+        if(memoryClip) playMemoryClip(memoryClip);
+      });
+      titleFor(s);
+      // Facts and graph data are written by an async backend task. Poll until
+      // the snapshot changes, with a maximum wait of 40 seconds.
+      watchMemories();
+      break;
+
+    case 'answer_interrupt':
+      replyPlaybackGeneration++;
+      const heardReply=typeof m.heard_text==='string'?m.heard_text:spokenCaption.shown;
+      setSpokenCaptionPlaying(false);
+      paintSpokenCaption(heardReply);
+      finishLiveChatDraft(s,heardReply);
+      liveReply='';
+      stopPlayback('interrupted'); aiSpeaking=false; setVoice('user'); break;
+
+    case 'tag_update': {
+      // Acoustic emotion is computed in the background and updates only emotion,
+      // leaving entities and slots untouched.
+      const s2=currentSession(); if(!s2) break;
+      if(m.emotion){ s2.ui.tags.emo=m.emotion; paint(s2); }
+      break;
+    }
+
+    case 'play_memory':
+      // Defer memory playback until the reply audio drains.
+      pendingMemoryClip=m.memory_id||''; break;
+
+    case 'error':
+      toast(m.message||i18n('backendGone')); break;
+  }
+}
+
+/* After a turn, wait for the backend task to persist memories; stop after 40 seconds. */
+let watchTimer=null, watchTurn=0, turnSeq=0;
+//: Number of hits in the latest memory response, used for empty-state diagnostics.
+let LAST_HITS={at:0,l:0,r:0,rAll:0};
+// Snapshots are capped, so compare content fingerprints instead of counts.
+function memSignature(){
+  const sp=SPACES[activeSpace];
+  if(!sp) return '';
+  const l=sp.left.map(x=>x.text).join('|');
+  const r=sp.right.map(x=>x.text+':'+(x.notes||[]).length).join('|');
+  return l+'##'+r;
+}
+function watchMemories(){
+  if(watchTimer) clearInterval(watchTimer);
+  watchTurn=++turnSeq;
+  const sig0=memSignature();
+  let tries=0;
+  watchTimer=setInterval(async function(){
+    tries++;
+    await loadMemories();
+    if(memSignature()!==sig0||tries>=20){ clearInterval(watchTimer); watchTimer=null; }
+  },2000);
+}
+
+/* Replay the original recording after queued response audio. Do not upload
+  replayed audio to the microphone path. */
+//: Maximum wait for queued assistant audio before replaying.
+//: Replay after the assistant introduction and impose a timeout as a safeguard.
+const REPLAY_MAX_WAIT_S=20;
+let replaying=false, replayTimer=null;
+function holdMic(ms){
+  replaying=true; lvOn=false;
+  clearTimeout(replayTimer);
+  replayTimer=setTimeout(()=>{ replaying=false; }, Math.max(0,ms));
+}
+function releaseMic(){ clearTimeout(replayTimer); replaying=false; }
+
+async function playMemoryClip(id){
+  if(!id) return;
+  try{
+    const r=await fetch('/api/audio/'+encodeURIComponent(id));
+    if(!r.ok){ console.warn('[replay] Failed to fetch recording', id, r.status); return; }
+    const ctx=ensurePlayback();
+    const buf=await ctx.decodeAudioData(await r.arrayBuffer());
+    const src=ctx.createBufferSource(); src.buffer=buf; src.connect(ctx.destination);
+    scheduled.push(src);
+    // Wait after queued speech, but never indefinitely: streamed audio can keep
+    // extending nextPlay and otherwise make the replay appear to be missing.
+    const wait=Math.min(Math.max(0,nextPlay-ctx.currentTime),REPLAY_MAX_WAIT_S);
+    const at=ctx.currentTime+wait+0.25;
+    src.start(at); nextPlay=at+buf.duration;
+    console.log('[replay] Playing recording', id, buf.duration.toFixed(1)+'s',
+          wait>REPLAY_MAX_WAIT_S?' (maximum TTS wait reached)':' (wait '+wait.toFixed(1)+'s)');
+    holdMic((at-ctx.currentTime+buf.duration)*1000+400);
+    src.onended=()=>{ setTimeout(releaseMic,400); };
+  }catch(e){ console.warn('[replay] Playback failed', e); releaseMic(); }
+}
+
+/* Ask the backend model for a concise conversation title after the second turn. */
+async function titleFor(s){
+  if(s.titled||s.turns.length<2) return;
+  s.titled=true;
+  try{
+    const text=s.turns.map(t=>t.text).join('\n');
+    const r=await fetch('/api/title',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+    if(!r.ok) return;
+    const j=await r.json();
+    if(j.title){ s.title=j.title; s.named=true; renderSessions(); }
+  }catch(e){}
+}
+
+/* --- Start / stop -------------------------------------------------- */
+const talkBtn=$('talkBtn'), pauseBtn=$('pauseBtn');
+function syncButtons(){
+  talkBtn.textContent=live?i18n('talkEnd'):i18n('talkStart');
+  talkBtn.classList.toggle('primary',!live);
+  talkBtn.classList.toggle('live',live);
+  pauseBtn.disabled=!live; pauseBtn.textContent=paused?i18n('resume'):i18n('pause');
+}
+function endLive(note){
+  live=false; paused=false;
+  stopMic(); stopPlayback();
+  if(ws){ ws.onclose=null; ws.close(); ws=null; }
+  aiSpeaking=false; syncButtons(); setVoice('idle');
+  if(note) toast(note);
+}
+talkBtn.addEventListener('click',async()=>{
+  if(live){ endLive(i18n('ended')); return; }
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    toast(i18n('micUnsupported')); return; }
+  ensurePlayback();               // Create playback from the user gesture.
+  try{ ws=new WebSocket(WS_URL); }catch(e){ toast(i18n('cantConnect', WS_HOST)); return; }
+  ws.binaryType='arraybuffer';
+  ws.onopen=async()=>{
+    live=true;
+    // Create the session before loading memories so early hits cannot land in an old session.
+    ensureSpaceObj(activeSpace);
+    createSession(activeSpace);
+    await loadMemories();
+    syncButtons(); setVoice('user');
+    try{ await startMic(); }
+    catch(e){ endLive(i18n('disconnected', i18n('micFailed', e.name))); }
+  };
+  ws.onmessage=ev=>{
+    if(ev.data instanceof ArrayBuffer){
+      try{ playPcm(ev.data); }catch(e){ console.warn('[audio] Dropped frame',e); }
+      return;
+    }
+    let msg;
+    try{ msg=JSON.parse(ev.data); }
+    catch(e){ console.error('[vm] JSON parse failed', e, ev.data); return; }
+    // Log handler errors clearly so later turns do not silently stop rendering.
+    try{ handle(msg); }
+    catch(e){ console.error('[vm] Failed to handle '+msg.type+':', e); }
+  };
+  ws.onclose=()=>{ endLive(i18n('backendGone')); };
+  ws.onerror=()=>{ toast(i18n('cantConnect', WS_HOST)); };
+});
+pauseBtn.addEventListener('click',()=>{
+  if(!live) return;
+  paused=!paused;
+  if(paused){ lvOn=false; stopPlayback(); }
+  setVoice(paused?'paused':'user'); syncButtons();
+});
+syncButtons();
+
+/* ── Language switching ───────────────────────────────────────────── */
+if($('langSel')){
+  $('langSel').value = LANG;
+  $('langSel').addEventListener('change', async e=>{
+    LANG = e.target.value === 'en' ? 'en' : 'it';
+    localStorage.setItem('vm-lang', LANG);
+    applyLang();
+    renderAll();                       // Re-render dynamic labels and empty states.
+    fillSpaceSel();
+    buildGraph(activeSpace);           // Rebuild graph labels in the selected language.
+    loadMemories();
+    // Tell the backend to use the selected language for future responses and extraction.
+    try{ await fetch('/api/lang',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({lang:LANG})}); }
+    catch(err){ console.warn('[lang] Backend unavailable', err); }
+  });
+}
+
+/* ── Startup ──────────────────────────────────────────────────────── */
+applyLang();
+// Reserve the active space before the backend list arrives.
+ensureSpaceObj(activeSpace);
+buildGraph(activeSpace);
+renderAll();
+// Load spaces first, then memories, so the initial graph is populated correctly.
+loadSpaces().then(loadMemories);
+fetch('/api/lang',{method:'POST',headers:{'Content-Type':'application/json'},
+                   body:JSON.stringify({lang:LANG})}).catch(()=>{});
+})();
+</script>
+</body>
+</html>

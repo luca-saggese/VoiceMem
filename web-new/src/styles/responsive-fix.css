@@ -1,0 +1,10 @@
+@media (max-width: 860px) {
+  .app,
+  .app.rail-collapsed {
+    height: auto;
+    min-height: 100%;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    overflow: auto;
+  }
+}

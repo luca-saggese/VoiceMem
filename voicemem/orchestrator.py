@@ -577,7 +577,15 @@ class Orchestrator:
             cached = merged_extraction.take_traits(text)
             if cached is not None:
                 valid = {"喜好与厌恶", "表达风格", "思维模式", "应对方式", "情绪"}
-                return _keep([(s, l) for s, l in cached if s in valid and l])
+                slot_map = {
+                    "喜好与厌恶": "Preferenze e avversioni",
+                    "表达风格": "Stile espressivo",
+                    "思维模式": "Modello mentale",
+                    "应对方式": "Modalità di coping",
+                    "情绪": "Emozione",
+                }
+                return _keep([(slot_map[s], l) for s, l in cached
+                              if s in valid and l])
 
         # 中英两套 prompt，按这一轮说的话选。
         #
@@ -640,12 +648,19 @@ class Orchestrator:
         except Exception:
             return []
         valid_slots = {"喜好与厌恶", "表达风格", "思维模式", "应对方式", "情绪"}
+        slot_map = {
+            "喜好与厌恶": "Preferenze e avversioni",
+            "表达风格": "Stile espressivo",
+            "思维模式": "Modello mentale",
+            "应对方式": "Modalità di coping",
+            "情绪": "Emozione",
+        }
         result = []
         for it in items:
             slot = str(it.get("slot", "")).strip()
             label = str(it.get("label", "")).strip()
             if slot in valid_slots and label:
-                result.append((slot, label))
+                result.append((slot_map[slot], label))
         return _keep(result)
 
     def _embed_text(self, text: str) -> list[float]:
