@@ -80,6 +80,9 @@ Issues = "https://github.com/lang-jiaqi/Voicemem_open/issues"
 [tool.setuptools.packages.find]
 include = ["voicemem*"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 # I testi dei prompt in data/ vengono letti a runtime (vedi leftbrain/mem0_additive_prompt_build.py),
 # se non dichiarati esplicitamente non finiranno nel wheel, e dopo l'installazione un call darà FileNotFoundError.
 [tool.setuptools.package-data]

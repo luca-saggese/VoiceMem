@@ -2263,6 +2263,21 @@ async def llm_tts_session(sock):
                     pending, sock.send_json, send_audio, owner, timeline,
                     said=reply_state, context_session=context_session,
                     context_space=context_space, memory_vm=memory_vm)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                # Non lasciare il browser senza testo/audio quando un provider
+                # locale (CosyVoice) o il provider LLM fallisce nel task.
+                # L'eccezione viene anche stampata con il tipo per diagnosi.
+                print(f"[web] risposta fallita: {type(exc).__name__}: {exc}",
+                      flush=True)
+                try:
+                    await sock.send_json({
+                        "type": "error",
+                        "message": f"Risposta non disponibile: {type(exc).__name__}: {exc}",
+                    })
+                except Exception:
+                    pass
             finally:
                 if not timeline.context_saved:
                     reply = timeline.heard_text()

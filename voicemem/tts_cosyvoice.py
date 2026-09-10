@@ -7,6 +7,7 @@ used. Synchronous inference runs in one worker thread and yields PCM16 mono
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import os
 import threading
 import traceback
@@ -109,7 +110,7 @@ class CosyVoice3TTS:
             future = asyncio.run_coroutine_threadsafe(queue.put(item), loop)
             try:
                 future.result(timeout=0.5)
-            except (asyncio.TimeoutError, RuntimeError):
+            except (asyncio.TimeoutError, RuntimeError, concurrent.futures.CancelledError):
                 future.cancel()
 
         def worker():
