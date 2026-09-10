@@ -39,7 +39,7 @@ class XiaozhiAudio:
         decoded = bytearray()
         for frame in self.decoder.decode(av.Packet(packet)):
             for resampled in self.resampler.resample(frame):
-                decoded.extend(resampled.to_ndarray(format="s16").reshape(-1).tobytes())
+                decoded.extend(resampled.to_ndarray().reshape(-1).tobytes())
         return bytes(decoded)
 
     async def encode_and_send(self, pcm: bytes, flush: bool = False) -> None:
@@ -74,6 +74,7 @@ class XiaozhiTransport:
         self.audio_sequence = 0
         self.started_sentence = False
         self.reply_text = ""
+        self.input_sink = None
         if mqtt_gateway:
             audio.packet_sink = self._send_gateway_audio
 
@@ -86,7 +87,10 @@ class XiaozhiTransport:
                     return {"bytes": b""}
                 payload_length = struct.unpack_from(">I", payload, 12)[0]
                 payload = payload[16:16 + payload_length]
-            return {"bytes": self.audio.decode(payload)}
+            pcm = self.audio.decode(payload)
+            if self.input_sink is not None and pcm:
+                await self.input_sink(pcm)
+            return {"bytes": pcm}
         return message
 
     async def _send_gateway_audio(self, payload: bytes) -> None:

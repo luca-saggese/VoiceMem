@@ -18,9 +18,9 @@ from voicemem.leftbrain.local_memory_store import (
     OpenAILocalEmbedder,
     OpenAILocalEmbedderConfig,
     TextEmbedder,
+    VoiceMemLocalMemoryStore,
     default_memory_root,
 )
-from voicemem.leftbrain.mem0_backend_store import Mem0BackendStore
 from voicemem.leftbrain.cognitive_graph import (
     CognitiveAnnotator,
     CognitiveAnnotatorConfig,
@@ -88,7 +88,7 @@ class LeftBrainMemoryRepository:
         # 自建 SQLite 向量库的行为差异（尤其是 id 生成方式变了——mem0 自己生成
         # id，不再用 cfg.db_path 指向的文件）。
         # 默认走 mem0；传入 vector_store（如 zep 等实现同接口的对象）即替换 memory engine。
-        self._vector_store = vector_store or Mem0BackendStore(embedder, memory_root=root)
+        self._vector_store = vector_store or VoiceMemLocalMemoryStore(embedder, memory_root=root)
 
         # 认知图
         self._cognitive_store: CognitiveGraphStore | None = None
@@ -113,7 +113,7 @@ class LeftBrainMemoryRepository:
         return self._vector_store._path  # noqa: SLF001 — 开发脚本需展示路径
 
     @property
-    def vector_store(self) -> Mem0BackendStore:
+    def vector_store(self) -> VoiceMemLocalMemoryStore:
         return self._vector_store
 
     # 这份左脑记忆镜像原来是 memory_root 下单独一个 memories.json。一个 space 只留

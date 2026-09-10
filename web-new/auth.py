@@ -229,7 +229,7 @@ class AuthService:
     def list_chat_sessions(self, request: Request) -> list[dict]:
         user_id = self._user_id_from_request(request)
         with self._connect() as db:
-            rows = db.execute("SELECT id,title,turns_json FROM chat_sessions WHERE user_id=? AND id NOT LIKE 'xiaozhi:%' ORDER BY updated_at DESC", (user_id,)).fetchall()
+            rows = db.execute("SELECT id,title,turns_json FROM chat_sessions WHERE user_id=? ORDER BY updated_at DESC", (user_id,)).fetchall()
         result = []
         for row in rows:
             try:
@@ -284,11 +284,24 @@ class AuthService:
             rows = db.execute("SELECT id,device_id,name,created_at FROM devices WHERE user_id=? ORDER BY created_at ASC", (user_id,)).fetchall()
         return [dict(row) for row in rows]
 
+    def device_for_user(self, user_id: int, device_id: str) -> dict | None:
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT id,user_id,device_id,name,created_at FROM devices WHERE user_id=? AND device_id=?",
+                (int(user_id), str(device_id).strip().lower()),
+            ).fetchone()
+        return dict(row) if row else None
+
     def add_device(self, request: Request, device_id: str, name: str) -> dict:
         user_id = self._user_id_from_request(request)
         device_id = str(device_id or "").strip()
         name = str(name or "").strip()
-        if not (device_id.isdigit() and len(device_id) == 6) and not re.fullmatch(r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}", device_id):
+        compact_device_id = re.sub(r"[:_-]", "", device_id)
+        if re.fullmatch(r"[0-9a-fA-F]{12}", compact_device_id):
+            device_id = ":".join(compact_device_id[index:index + 2].lower() for index in range(0, 12, 2))
+        elif re.fullmatch(r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}", device_id):
+            device_id = device_id.lower()
+        elif not (device_id.isdigit() and len(device_id) == 6):
             raise HTTPException(400, "L'identificativo deve essere di 6 numeri o un MAC address Xiaozhi")
         if not name or len(name) > 80:
             raise HTTPException(400, "Inserisci un nome valido per il device")
@@ -308,6 +321,11 @@ class AuthService:
         expected_token = os.environ.get("VOICEMEM_XIAOZHI_DEVICE_TOKEN", "").strip()
         if expected_token and not hmac.compare_digest(token, expected_token):
             return None
+        return self.find_device(device_id)
+
+    def find_device(self, device_id: str) -> dict | None:
+        """Find a registered device by MAC without authenticating a transport."""
+        device_id = str(device_id or "").strip()
         with self._connect() as db:
             row = db.execute("SELECT users.id,users.email,users.display_name,devices.device_id,devices.name FROM devices JOIN users ON users.id=devices.user_id WHERE lower(devices.device_id)=lower(?)", (device_id,)).fetchone()
         return dict(row) if row else None

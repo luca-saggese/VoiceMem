@@ -16,6 +16,7 @@ export function useVoiceMem() {
   const [paused, setPaused] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [activeMemoryIds, setActiveMemoryIds] = useState([]);
+  const [activeDeviceId, setActiveDeviceId] = useState('');
   const sessionsLoaded = useRef(false);
   const socket = useRef(null);
   const mic = useRef({ stream: null, context: null, processor: null, source: null });
@@ -200,17 +201,30 @@ export function useVoiceMem() {
     setLive(false); setPaused(false); setStatus('Inattivo');
   }, [stopMic]);
 
-  const start = useCallback(async () => {
-    if (live) { close(); return; }
-    if (!navigator.mediaDevices?.getUserMedia) { setStatus('Microfono non disponibile'); return; }
+  const start = useCallback(async (device = null) => {
+    if (live && !device) { close(); return; }
+    if (live && device) {
+      stopMic();
+      stopPlayback('switch-device');
+      if (socket.current) {
+        socket.current.onclose = null;
+        socket.current.close();
+        socket.current = null;
+      }
+    }
+    if (!device && !navigator.mediaDevices?.getUserMedia) { setStatus('Microfono non disponibile'); return; }
     try {
       await ensurePlayback();
       const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-      const connection = new WebSocket(`${protocol}://${location.host}/ws?space=${encodeURIComponent(spaceId)}`);
+      const endpoint = device
+        ? `/ws/device?device=${encodeURIComponent(device.device_id)}&space=${encodeURIComponent(spaceId)}`
+        : `/ws?space=${encodeURIComponent(spaceId)}`;
+      const connection = new WebSocket(`${protocol}://${location.host}${endpoint}`);
       connection.binaryType = 'arraybuffer';
       socket.current = connection;
       connection.onopen = async () => {
-        setLive(true); setStatus('In ascolto');
+        setLive(true); setStatus(device ? `Device: ${device.name}` : 'In ascolto');
+        if (device) return;
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
           const context = new (window.AudioContext || window.webkitAudioContext)();
@@ -237,6 +251,7 @@ export function useVoiceMem() {
         let message;
         try { message = JSON.parse(event.data); } catch { return; }
         if (message.type === 'session_ready') setStatus('In ascolto');
+        if (message.type === 'input_audio_level') setAudioLevel(Number(message.level || 0));
         if (message.type === 'partial_transcript') setLiveInput(message.text || '');
         if (message.type === 'user_transcript') {
           setLiveInput(message.text || '');
@@ -276,9 +291,26 @@ export function useVoiceMem() {
         }
       };
       connection.onerror = () => setStatus('Backend disconnesso');
-      connection.onclose = () => { stopMic(); setLive(false); setStatus('Inattivo'); };
+      connection.onclose = () => { stopMic(); setLive(false); setActiveDeviceId(''); setStatus('Inattivo'); };
     } catch { setStatus('Backend disconnesso'); }
   }, [close, finishPlayback, live, loadMemories, playPcm, sessionId, spaceId, stopMic, stopPlayback]);
+
+  const selectDevice = useCallback((device) => {
+    if (activeDeviceId === device.device_id && live) {
+      close();
+      return;
+    }
+    if (live) close();
+    setActiveDeviceId(device.device_id);
+    const deviceSessionId = `xiaozhi:${device.device_id}`;
+    setSessions((current) => current.some((session) => session.id === deviceSessionId)
+      ? current
+      : [...current, { id: deviceSessionId, title: `Device ${device.name}`, turns: [] }]);
+    setSessionId(deviceSessionId);
+    setLiveInput('');
+    setReply('Nessuna risposta ancora.');
+    start(device);
+  }, [activeDeviceId, close, live, start]);
 
   const togglePause = useCallback(() => {
     setPaused((value) => { const next = !value; pausedRef.current = next; if (next) stopPlayback('pause'); return next; });
@@ -308,5 +340,5 @@ export function useVoiceMem() {
     setReply('Nessuna risposta ancora.');
   }, []);
 
-  return { spaces, spaceId, setSpaceId, sessions, sessionId, setSessionId, liveInput, reply, recall, status, live, paused, audioLevel, activeMemoryIds, sendText, start, togglePause, createSession, loadMemories };
+  return { spaces, spaceId, setSpaceId, sessions, sessionId, setSessionId, liveInput, reply, recall, status, live, paused, audioLevel, activeMemoryIds, activeDeviceId, sendText, start, selectDevice, togglePause, createSession, loadMemories };
 }

@@ -29,6 +29,7 @@ import hmac
 import json
 import os
 import re
+import socket
 import sys
 import time
 import uuid
@@ -1024,6 +1025,20 @@ _CURRENT_SPACE = contextvars.ContextVar("voicemem_space", default=ARGS.space)
 
 def current_space() -> str:
     return _CURRENT_SPACE.get()
+
+
+def _xiaozhi_public_host() -> str:
+    configured = os.environ.get("VOICEMEM_PUBLIC_IP", "").strip()
+    if configured:
+        return configured
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect(("8.8.8.8", 80))
+        return probe.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        probe.close()
 
 
 class _UserVoiceMemProxy:
@@ -3234,6 +3249,50 @@ app = utils.build_app(MODE, realtime_session if MODE == "realtime" else llm_tts_
 from auth import attach_auth_routes  # noqa: E402
 AUTH = attach_auth_routes(app)
 
+_XIAOZHI_MONITORS: dict[str, set] = {}
+
+
+async def _broadcast_xiaozhi(device_id: str, message=None, audio: bytes | None = None) -> None:
+    clients = list(_XIAOZHI_MONITORS.get(str(device_id).lower(), ()))
+    stale = []
+    for client in clients:
+        try:
+            if message is not None:
+                await client.send_json(message)
+            if audio is not None:
+                await client.send_bytes(audio)
+        except Exception:
+            stale.append(client)
+    if stale:
+        _XIAOZHI_MONITORS.get(str(device_id).lower(), set()).difference_update(stale)
+
+
+@app.websocket("/ws/device")
+async def xiaozhi_monitor(sock: WebSocket):
+    reset_user = _set_websocket_context(sock)
+    user = AUTH.user_from_session_token(sock.cookies.get(AUTH.cookie_name, ""))
+    device_id = (sock.query_params.get("device", "") or "").strip().lower()
+    device = AUTH.device_for_user(user["id"], device_id) if user else None
+    if not device:
+        await sock.accept()
+        await sock.close(code=1008)
+        reset_user()
+        return
+    await sock.accept()
+    monitors = _XIAOZHI_MONITORS.setdefault(device_id, set())
+    monitors.add(sock)
+    try:
+        await sock.send_json({"type": "session_ready", "mode": "xiaozhi_monitor", "device_id": device_id})
+        while True:
+            await sock.receive()
+    except Exception:
+        pass
+    finally:
+        monitors.discard(sock)
+        if not monitors:
+            _XIAOZHI_MONITORS.pop(device_id, None)
+        reset_user()
+
 
 @app.middleware("http")
 async def set_http_context(request, call_next):
@@ -3287,13 +3346,33 @@ async def xiaozhi_websocket(sock: WebSocket):
             sock, XiaozhiAudio(sock), session_id,
             mqtt_gateway=sock.query_params.get("from") == "mqtt_gateway",
         )
+        async def send_to_device_and_monitors(message: dict):
+            await transport.send_json(message)
+            await _broadcast_xiaozhi(device_id, message=message)
+
+        async def send_audio_to_device_and_monitors(pcm: bytes):
+            await transport.send_audio(pcm)
+            await _broadcast_xiaozhi(device_id, audio=pcm)
+
+        async def monitor_input_audio(pcm: bytes):
+            from array import array
+            samples = array("h")
+            samples.frombytes(pcm[: len(pcm) - (len(pcm) % 2)])
+            peak = max((abs(sample) for sample in samples), default=0)
+            await _broadcast_xiaozhi(
+                device_id,
+                message={"type": "input_audio_level", "level": min(1.0, peak / 32768 * 2.5)},
+            )
+
+        transport.input_sink = monitor_input_audio
+
         owner = {"id": "", "last": "", "miss": 0}
         speech_rate = SpeechRateEstimator()
         context_session = f"xiaozhi-{device_id}-{session_id}"
         async for pending in _session_anticipate(context_session, transport):
             timeline = AudioTimeline(prebuffer_seconds=0.16, rate_estimator=speech_rate)
             await voicemem_llm_tts(
-                pending, transport.send_json, transport.send_audio, owner, timeline,
+                pending, send_to_device_and_monitors, send_audio_to_device_and_monitors, owner, timeline,
                 context_session=context_session, context_space=ACTIVE_SPACE,
                 memory_vm=vm,
             )
@@ -3315,17 +3394,20 @@ def xiaozhi_ota_info():
 
 
 @app.post("/xiaozhi/ota/")
+@app.post("/xiaozhi/ota")
 async def xiaozhi_ota(request: Request):
     device_id = request.headers.get("device-id", "").strip()
     normalized_device_id = device_id.lower()
-    device = AUTH.authenticate_device(device_id, request.headers.get("authorization", ""))
+    device = AUTH.find_device(device_id)
     if not re.fullmatch(r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}", device_id):
         raise HTTPException(status_code=400, detail="Device-Id Xiaozhi non valido")
+    public_host = _xiaozhi_public_host()
+    websocket_url = os.environ.get("VOICEMEM_XIAOZHI_WS_URL", f"ws://{public_host}:{ARGS.port}/xiaozhi/v1/")
     response = {
         "server_time": {"timestamp": int(time.time() * 1000), "timezone_offset": 0},
         "firmware": {"version": os.environ.get("VOICEMEM_XIAOZHI_FIRMWARE_VERSION", ""), "url": ""},
         "websocket": {
-            "url": os.environ.get("VOICEMEM_XIAOZHI_WS_URL", f"ws://127.0.0.1:{ARGS.port}/xiaozhi/v1/"),
+            "url": websocket_url,
             "token": os.environ.get("VOICEMEM_XIAOZHI_DEVICE_TOKEN", ""),
         },
     }
@@ -3337,17 +3419,16 @@ async def xiaozhi_ota(request: Request):
             "timeout_ms": int(os.environ.get("VOICEMEM_XIAOZHI_ACTIVATION_TIMEOUT_MS", "60000")),
         }
         print(f"[xiaozhi][ota] device non registrato device_id={normalized_device_id}; activation restituita", flush=True)
-        return response
     mqtt_enabled = os.environ.get("VOICEMEM_XIAOZHI_MQTT_ENABLED", "0").lower() in {"1", "true", "yes", "on"}
     mqtt_endpoint = os.environ.get("VOICEMEM_XIAOZHI_MQTT_ENDPOINT", os.environ.get("MQTT_ENDPOINT", "")).strip()
     if mqtt_enabled and not mqtt_endpoint:
-        mqtt_endpoint = os.environ.get("VOICEMEM_PUBLIC_IP", "127.0.0.1").strip()
+        mqtt_endpoint = public_host
     signature_key = os.environ.get("VOICEMEM_XIAOZHI_MQTT_SIGNATURE_KEY", os.environ.get("MQTT_SIGNATURE_KEY", ""))
     if mqtt_endpoint and signature_key:
         client_id = request.headers.get("client-id", "") or uuid.uuid4().hex
         mac_id = device_id.replace(":", "_").lower()
         mqtt_client_id = f"{os.environ.get('VOICEMEM_XIAOZHI_MQTT_GROUP_ID', 'GID_default')}@@@{mac_id}@@@{client_id}"
-        mqtt_username = base64.b64encode(json.dumps({"ip": os.environ.get("VOICEMEM_PUBLIC_IP", "")}).encode()).decode()
+        mqtt_username = base64.b64encode(json.dumps({"ip": public_host}).encode()).decode()
         mqtt_password = base64.b64encode(hmac.new(
             signature_key.encode(), f"{mqtt_client_id}|{mqtt_username}".encode(), hashlib.sha256
         ).digest()).decode()
@@ -3361,19 +3442,26 @@ async def xiaozhi_ota(request: Request):
             "subscribe_topic": f"devices/p2p/{mac_id}",
         }
         response["udp"] = {
-            "endpoint": os.environ.get("VOICEMEM_XIAOZHI_UDP_ENDPOINT", os.environ.get("UDP_GATEWAY", mqtt_endpoint)),
+            "endpoint": os.environ.get("VOICEMEM_XIAOZHI_UDP_ENDPOINT", os.environ.get("UDP_GATEWAY", public_host)),
         }
+    ota_log = json.loads(json.dumps(response))
+    if ota_log.get("mqtt", {}).get("password") and os.environ.get("VOICEMEM_XIAOZHI_LOG_SECRETS", "0").lower() not in {"1", "true", "yes", "on"}:
+        ota_log["mqtt"]["password"] = "<redacted>"
+    print(f"[xiaozhi][ota] response device_id={normalized_device_id}: {json.dumps(ota_log, ensure_ascii=True, separators=(',', ':'))}", flush=True)
     return response
 
 
 @app.post("/activate")
 @app.post("/xiaozhi/activate/")
+@app.post("/xiaozhi/activate")
+@app.post("/xiaozhi/ota/activate")
+@app.post("/xiaozhi/ota/activate/")
 async def xiaozhi_activate(request: Request):
     device_id = request.headers.get("device-id", "").strip()
     if not re.fullmatch(r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}", device_id):
         raise HTTPException(status_code=400, detail="Device-Id Xiaozhi non valido")
     normalized_device_id = device_id.lower()
-    device = AUTH.authenticate_device(device_id, request.headers.get("authorization", ""))
+    device = AUTH.find_device(device_id)
     if device:
         return {"code": 0, "message": "Device già registrato", "device_id": normalized_device_id}
     print(f"[xiaozhi][activate] device_id={normalized_device_id}; registrazione manuale ancora necessaria", flush=True)

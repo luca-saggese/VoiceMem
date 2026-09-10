@@ -64,10 +64,10 @@ def default_utils(base_url, memory_root):
         return make_tts()
     def memory_engine():
         from pathlib import Path
-        from voicemem.leftbrain.mem0_backend_store import Mem0BackendStore
+        from voicemem.leftbrain.local_memory_store import VoiceMemLocalMemoryStore
         # memory_root viene passato da Orchestrator (valori default già risolti); il fallback qui è utile solo
         # quando si costruisce default_utils direttamente, mantiene lo stesso default di sopra.
-        return Mem0BackendStore(embedding(),
+        return VoiceMemLocalMemoryStore(embedding(),
                                 memory_root=Path(memory_root or Path.cwd() / "voicemem_memory"))
     return {"embedding": embedding, "slots": slots, "entity": entity, "emotion": emotion,
             "voiceprint": voiceprint, "asr": asr, "vad": vad, "memory_engine": memory_engine,

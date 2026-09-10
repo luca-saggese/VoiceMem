@@ -19,7 +19,7 @@ Un config completo è così (la config di ogni sezione è opzionale, se omessa u
         "embedding": {"provider": "local"},                 # Vettori memoria usano E5 locale
         "slots":     {"provider": "local"},                 # Classificazione slot usa E5 locale (0 LLM)
         "vad":       {"provider": "silero"},                # Rileva "ha finito di parlare"; custom per sostituire con il proprio
-        "memory_engine": {"provider": "mem0"},              # Backend database vettoriale (default mem0)
+        "memory_engine": {"provider": "local"},             # SQLite + embedding locale VoiceMem
         "tts": {"provider": "openai",                       # Audio (layer opzionale)
                 "config": {"model": "gpt-4o-mini-tts", "voice": "coral"}},
         "llm": {"provider": "openai",                       # LLM interno cervello sinistro/destro (etichettatura/attribution…)
@@ -48,7 +48,7 @@ Mappatura provider → implementazione integrata (semplice da capire a colpo d'o
                            openai -> QuerySlotClassifier (1 chiamata LLM)
     vad.provider           silero -> make_vad (integrato, config può dare model / threshold)
                            custom -> l'oggetto config.obj (deve avere is_speech(frame)->bool)
-    memory_engine.provider mem0   -> Mem0BackendStore (default, anche omettendo usa il default integrato)
+    memory_engine.provider local  -> VoiceMemLocalMemoryStore (SQLite + embedding VoiceMem)
     tts.provider           openai -> OpenAITTS (API OpenAI TTS, configurabile voice/instructions)
                            local  -> PiperTTS (piper offline, alias piper)
                            voxcpm -> VoxCPMTTS (VoxCPM2 offline)
@@ -159,12 +159,10 @@ def _vad_factory(provider, cfg):
 
 
 def _memory_engine_factory(provider, cfg):
-    """memory_engine: mem0 -> Mem0BackendStore (default, anche omettendo usa il default integrato)."""
-    if provider == "mem0":
-        # None → lascia che VoiceMem usi il memory_engine default integrato (cioè Mem0BackendStore).
-        # Non serve costruirlo esplicitamente qui: il default integrato è già mem0, ometterlo è più semplice e semanticamente coerente.
+    """memory_engine: local -> store SQLite nativo VoiceMem."""
+    if provider == "local":
         return None
-    _bad("memory_engine", provider, ["mem0"])
+    _bad("memory_engine", provider, ["local"])
 
 
 

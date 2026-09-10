@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import os
 import re
+import json
+import sqlite3
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -284,3 +287,107 @@ def mock_embedder(dim: int = 8, seed: int = 0) -> TextEmbedder:
             return out
 
     return _Mock()
+
+
+class VoiceMemLocalMemoryStore:
+    """Store locale VoiceMem: SQLite per testo, metadati e vettori JSON."""
+
+    def __init__(self, embedder: TextEmbedder, *, memory_root: Path) -> None:
+        self._embedder = embedder
+        self._path = Path(memory_root)
+        self._path.mkdir(parents=True, exist_ok=True)
+        self._db = self._path / _DEFAULT_MEMORY_SQLITE
+        with sqlite3.connect(self._db) as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS memories (
+                id TEXT PRIMARY KEY, user_id TEXT NOT NULL, text TEXT NOT NULL,
+                attributed_to TEXT NOT NULL DEFAULT 'user', metadata TEXT NOT NULL,
+                vector TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL)""")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_memories_user ON memories(user_id)")
+
+    def _rows(self, user_id: str):
+        with sqlite3.connect(self._db) as db:
+            return db.execute("SELECT id,text,attributed_to,metadata,vector,archived FROM memories WHERE user_id=?", (user_id,)).fetchall()
+
+    def add_records_with_ids(self, user_id: str, items: Sequence[tuple[str, str, str, dict[str, Any]]]) -> list[str]:
+        valid = [(text.strip(), attributed_to, metadata or {}) for _, text, attributed_to, metadata in items if (text or '').strip()]
+        if not valid:
+            return []
+        vectors = self._embedder.embed_texts([item[0] for item in valid])
+        ids = []
+        with sqlite3.connect(self._db) as db:
+            for (text, attributed_to, metadata), vector in zip(valid, vectors):
+                memory_id = uuid.uuid4().hex
+                db.execute("INSERT INTO memories VALUES(?,?,?,?,?,?,0,?)", (memory_id, user_id, text, attributed_to or 'user', json.dumps(metadata, ensure_ascii=False), json.dumps(vector), _utc_iso()))
+                ids.append(memory_id)
+        return ids
+
+    def add_text(self, user_id: str, text: str, *, attributed_to: str = 'user', metadata: dict[str, Any] | None = None) -> str:
+        ids = self.add_records_with_ids(user_id, [('', text, attributed_to, metadata or {})])
+        if not ids:
+            raise ValueError('text non può essere vuoto')
+        return ids[0]
+
+    def update_memory(self, memory_id: str, new_text: str, session_id=None, observed_at=None) -> bool:
+        text = (new_text or '').strip()
+        if not text:
+            return False
+        vector = self._embedder.embed_texts([text])[0]
+        with sqlite3.connect(self._db) as db:
+            cur = db.execute("UPDATE memories SET text=?,vector=? WHERE id=?", (text, json.dumps(vector), memory_id))
+        return cur.rowcount > 0
+
+    def delete_memory(self, memory_id: str) -> bool:
+        with sqlite3.connect(self._db) as db:
+            cur = db.execute("DELETE FROM memories WHERE id=?", (memory_id,))
+        return cur.rowcount > 0
+
+    def archive_memory(self, memory_id: str) -> bool:
+        with sqlite3.connect(self._db) as db:
+            cur = db.execute("UPDATE memories SET archived=1 WHERE id=?", (memory_id,))
+        return cur.rowcount > 0
+
+    def unarchive_memory(self, memory_id: str) -> bool:
+        with sqlite3.connect(self._db) as db:
+            cur = db.execute("UPDATE memories SET archived=0 WHERE id=?", (memory_id,))
+        return cur.rowcount > 0
+
+    def list_ids(self, *, user_id: str) -> list[str]:
+        return [row[0] for row in self._rows(user_id) if not row[5]]
+
+    def list_entries(self, *, user_id: str) -> list[dict[str, str]]:
+        out = []
+        for memory_id, text, role, raw_metadata, _, archived in self._rows(user_id):
+            if archived:
+                continue
+            metadata = json.loads(raw_metadata or '{}')
+            out.append({'id': memory_id, 'text': text, 'date': str(metadata.get('time_start') or metadata.get('created_at') or '')[:10], 'role': role})
+        return out
+
+    def existing_for_extractor(self, user_id: str, *, limit: int = 50) -> list[dict[str, str]]:
+        return [{'id': row[0], 'text': row[1]} for row in self._rows(user_id) if not row[5]][:limit]
+
+    def memory_ids_with_time_expr(self, user_id: str, *, kind: str) -> set[str]:
+        pattern = _DURATION_RE if kind == 'duration' else _DATE_RE
+        return {row[0] for row in self._rows(user_id) if not row[5] and pattern.search(row[1])}
+
+    def search(self, query: str, *, user_id: str, top_k: int = 10, threshold: float | None = None, memory_id_filter=None, rescue_k: int = 0, include_assistant: bool = False) -> list[MemorySearchHit]:
+        query = (query or '').strip()
+        if not query:
+            return []
+        qvec = self._embedder.embed_texts([query])[0]
+        qnorm = sum(value * value for value in qvec) ** 0.5 or 1.0
+        allowed = set(memory_id_filter) if memory_id_filter else None
+        hits = []
+        for memory_id, text, role, raw_metadata, raw_vector, archived in self._rows(user_id):
+            if archived or (allowed is not None and memory_id not in allowed) or (role == 'assistant' and not include_assistant):
+                continue
+            vector = json.loads(raw_vector)
+            denom = qnorm * (sum(value * value for value in vector) ** 0.5 or 1.0)
+            score = sum(a * b for a, b in zip(qvec, vector)) / denom
+            if threshold is not None and score < threshold:
+                continue
+            metadata = json.loads(raw_metadata or '{}')
+            hits.append(MemorySearchHit(memory_id, text, score, role, metadata, score, False, str(metadata.get('time_start') or '')[:10]))
+        hits.sort(key=lambda hit: hit.score, reverse=True)
+        return hits[:top_k]

@@ -231,6 +231,7 @@ class XiaozhiMqttBroker:
 
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         device = None
+        device_id = None
         peer = writer.get_extra_info("peername")
         print(f"[xiaozhi][mqtt] connessione TCP da {peer}", flush=True)
         try:
@@ -260,8 +261,19 @@ class XiaozhiMqttBroker:
             device = MqttDevice(self, reader, writer, client_id, device_id, username, registered=registered)
             for existing in list(self.devices.values()):
                 if existing.device_id == device_id:
+                    print(
+                        f"[xiaozhi][mqtt] {peer} chiudo connessione precedente "
+                        f"device_id={device_id} connection_id={existing.connection_id}",
+                        flush=True,
+                    )
                     await existing.close()
             self.devices[device.connection_id] = device
+            print(
+                f"[xiaozhi][mqtt] {peer} sessione MQTT pronta device_id={device_id} "
+                f"connection_id={device.connection_id} registered={registered}; "
+                "in attesa di SUBSCRIBE/PUBLISH",
+                flush=True,
+            )
             while not reader.at_eof():
                 packet_type, payload = await self._read_packet(reader)
                 print(f"[xiaozhi][mqtt] {peer} packet type={packet_type} bytes={len(payload)} device={device_id}", flush=True)
@@ -279,6 +291,19 @@ class XiaozhiMqttBroker:
                     await writer.drain()
                 elif packet_type == 14:
                     break
+        except asyncio.IncompleteReadError as exc:
+            if exc.partial:
+                print(
+                    f"[xiaozhi][mqtt] {peer} pacchetto troncato dopo "
+                    f"{len(exc.partial)} byte; device_id={device_id or 'sconosciuto'}",
+                    flush=True,
+                )
+            else:
+                print(
+                    f"[xiaozhi][mqtt] {peer} EOF dal client senza altri pacchetti; "
+                    f"device_id={device_id or 'sconosciuto'}",
+                    flush=True,
+                )
         except Exception as exc:
             print(f"[xiaozhi][mqtt] {peer} chiuso/errore: {type(exc).__name__}: {exc}", flush=True)
         finally:

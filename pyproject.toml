@@ -27,7 +27,6 @@ classifiers = [
 dependencies = [
     "numpy",
     "openai[realtime]",
-    "mem0ai",
     # ── audio chain ──
     "torch",
     "torchaudio",         # funasr lo importa internamente ma non lo dichiara da sé

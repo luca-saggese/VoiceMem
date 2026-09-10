@@ -1,4 +1,4 @@
-"""左脑（语义 / 事实记忆）：additive 抽取、mem0/Qdrant 向量存储（见 mem0_backend_store.py）。"""
+"""左脑（语义 / 事实记忆）：additive 抽取与 VoiceMem SQLite 向量存储。"""
 
 from voicemem.leftbrain.extract_facts_openai import (
     ExtractedAdditiveMemory,
@@ -10,6 +10,7 @@ from voicemem.leftbrain.local_memory_store import (
     OpenAILocalEmbedder,
     OpenAILocalEmbedderConfig,
     TextEmbedder,
+    VoiceMemLocalMemoryStore,
     default_local_memory_db_path,
     default_memory_root,
     mock_embedder,
@@ -29,6 +30,7 @@ __all__ = [
     "OpenAILocalEmbedder",
     "OpenAILocalEmbedderConfig",
     "TextEmbedder",
+    "VoiceMemLocalMemoryStore",
     "default_local_memory_db_path",
     "default_memory_root",
     "mock_embedder",
