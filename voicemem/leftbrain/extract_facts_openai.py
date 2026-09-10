@@ -24,6 +24,7 @@ from voicemem.leftbrain.mem0_additive_prompt_build import (
 
 from voicemem.utils.common.cost_log import log_usage as _log_usage
 from voicemem.llm_config import resolve_api_key, resolve_model
+from voicemem.lang import language_name, memory_language
 
 
 def remove_code_blocks(content: str) -> str:
@@ -185,7 +186,7 @@ class OpenAIAdditiveExtractorConfig:
     model: str | None = None
     api_key: str | None = None
     base_url: str | None = None
-    use_input_language: bool = True
+    use_input_language: bool = False
 
     def resolved_model(self) -> str:
         return resolve_model(self.model)
@@ -197,16 +198,18 @@ class OpenAIAdditiveExtractorConfig:
 # （值不同），但都和 "User's favorite restaurant" 很像，这样旧值必进比较窗口
 # （benchmark 上 UPDATE 漏判的主因就是旧值挤不进 top-k）。抽取本来就要调一次
 # LLM，多一个字段零成本。
-_LANGUAGE_RULE = """
+def _language_rule() -> str:
+    lang = language_name()
+    return f"""
 
 # LANGUAGE
 
-Write each memory in the SAME language the user spoke it in. A Chinese utterance
-becomes a Chinese memory, an English one an English memory. Never translate.
+Write every extracted memory in {lang}, regardless of the language or script used
+by the user. Translate non-{lang} input faithfully into {lang}. Keep proper nouns
+and product names unchanged when appropriate, but do not leave the surrounding
+sentence in the input language.
 
-Retrieval is embedding-based: a Chinese question and an English memory about the
-same thing are far apart in vector space, so a translated memory quietly becomes
-unfindable. Keep proper nouns and product names as the user said them.
+The memory space has one fixed language so that retrieval remains consistent.
 """
 
 
@@ -272,7 +275,7 @@ class OpenAIMem0V3AdditiveExtractor:
 
     def __init__(self, config: OpenAIAdditiveExtractorConfig | None = None) -> None:
         self._cfg = config or OpenAIAdditiveExtractorConfig()
-        self._system = load_additive_system_prompt() + _LANGUAGE_RULE + _ATTRIBUTE_ADDENDUM + _VOICE_ADDENDUM
+        self._system = load_additive_system_prompt() + _language_rule() + _ATTRIBUTE_ADDENDUM + _VOICE_ADDENDUM
 
     def extract(
         self,

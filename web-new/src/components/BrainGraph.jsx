@@ -163,7 +163,8 @@ export function BrainGraph({ memories = { left: [], right: [] }, activeMemoryIds
             if (cardParts.src) cardParts.src.textContent = 'identity · anchor';
           } else {
             if (cardParts.kd) cardParts.kd.textContent = `${node.kind} · ${node.cluster}`;
-            if (cardParts.body) cardParts.body.textContent = node.detail?.desc || node.detail?.text || node.w;
+            const body = node.detail?.desc || node.detail?.text || node.w;
+            if (cardParts.body) cardParts.body.textContent = /[\u3400-\u9fff]/.test(body) ? 'Translation pending.' : body;
             if (cardParts.src) cardParts.src.textContent = node.side === 'L' ? 'Sinistro · fatti' : 'Destro · profilo';
           }
           card.style.opacity = '1'; cardOn = true;

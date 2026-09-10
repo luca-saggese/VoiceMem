@@ -21,6 +21,7 @@ export function Sidebar({
   activeDeviceId,
   onDeviceSelect,
 }) {
+  const visibleSessions = sessions.filter((session) => !String(session.id).startsWith("xiaozhi:"));
   const [accountOpen, setAccountOpen] = useState(false);
   const [devices, setDevices] = useState([]);
   const [deviceModalOpen, setDeviceModalOpen] = useState(false);
@@ -114,7 +115,7 @@ export function Sidebar({
             <ul className="device-list">
               {devices.map((device) => (
                 <li
-                  className={device.device_id === activeDeviceId ? "on" : ""}
+                  className={device.device_id === activeDeviceId || activeId === `xiaozhi:${device.device_id}` ? "on" : ""}
                   key={device.id}
                   onClick={() => onDeviceSelect(device)}
                 >
@@ -130,10 +131,10 @@ export function Sidebar({
               )}
             </ul>
             <div className="side-label">
-              Conversazioni<span className="count">{sessions.length}</span>
+              Conversazioni<span className="count">{visibleSessions.length}</span>
             </div>
             <ul className="sess">
-              {sessions.map((session) => (
+              {visibleSessions.map((session) => (
                 <li
                   className={session.id === activeId ? "on" : ""}
                   key={session.id}

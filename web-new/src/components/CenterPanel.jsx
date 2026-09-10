@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 function Recall({ title, items, side }) { return <div className={`rc ${side}`}><div className="rc-h">{title}</div><ul>{(items.length ? items : ['Nessuna corrispondenza']).map((item, index) => <li key={`${item}-${index}`}><span>{typeof item === 'string' ? item : item.text}</span>{typeof item !== 'string' && <span className="sc">{item.score?.toFixed?.(2) || ''}</span>}</li>)}</ul></div>; }
-export function CenterPanel({ liveInput, reply, recall, status, audioLevel, onSend, onStart, onPause }) {
+export function CenterPanel({ isDeviceConversation, liveInput, reply, recall, status, audioLevel, onSend, onStart, onPause }) {
   const [text, setText] = useState('');
   const waveRef = useRef(null);
   const orbRef = useRef(null);
@@ -18,6 +18,14 @@ export function CenterPanel({ liveInput, reply, recall, status, audioLevel, onSe
     const idleSpeed = .10; const liveSpeed = .5; const rotation = .5; const liveRotation = 1.2;
     const spread = .3; const lineWidth = 1.1; const squish = .88;
     let orbLevel = 0; let orbPhase = 0; let orbRotation = 0; let last = performance.now(); let accumulator = 0;
+    const resize = () => {
+      const ratio = Math.min(2, window.devicePixelRatio || 1);
+      const width = canvas.clientWidth || 264; const height = canvas.clientHeight || width;
+      //if (canvas.width !== width * ratio || canvas.height !== height * ratio) {
+        canvas.width = width * ratio; canvas.height = height * ratio;
+        glow.width = width * ratio; glow.height = height * ratio;
+      //}
+    };
     const orbPoint = (angle, phase, strand, radius, amount, verticalScale) => {
       const strandPhase = (strand / strands) * Math.PI * 2;
       const currentRadius = radius * (1 + amount * (
@@ -91,9 +99,11 @@ export function CenterPanel({ liveInput, reply, recall, status, audioLevel, onSe
       }
       frame = requestAnimationFrame(draw);
     };
+    resize();
+    window.addEventListener('load', resize, { once: true });
     let frame = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(frame);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('load', resize); };
   }, [status]);
   const submit = (event) => { event.preventDefault(); onSend(text); setText(''); };
-  return <section className="center"><canvas ref={orbRef} className="orb" aria-hidden="true" /><div className="panel p-in"><div className="panel-h">Input streaming</div><div className="spk"><span className="av">Tu</span><span>Tu</span><span className="id">speaker 0 · voce riconosciuta</span><span className="levels">▂▅▇▅▂</span></div><div className={`live-text ${liveInput ? '' : 'idle'}`}>{liveInput || 'In attesa della tua voce…'}</div><form onSubmit={submit}><input className="textin" value={text} onChange={(event) => setText(event.target.value)} placeholder="Oppure scrivi e premi Invio" /></form><div className="tags"><span className="tag ent"><b>ENT</b> VoiceMem</span><span className="tag emo"><b>EMO</b> curiosità</span></div></div><div className="panel p-recall"><div className="panel-h">Recupero Top-K</div><div className="recall-cols"><Recall title="Sinistro · fatti" items={recall.left || []} side="l" /><Recall title="Destro · profilo" items={recall.right || []} side="r" /></div></div><div className="panel p-out"><div className="panel-h">Risposta AI</div><div className={`reply ${reply.startsWith('Nessuna') ? 'idle' : ''}`}>{reply}</div><div className="out-foot"><div className="voice"><canvas ref={waveRef} className="wave" /><span className="lab">{status}</span></div><div className="btns"><button className="btn" onClick={onPause} disabled={status === 'Inattivo'}>{status === 'In pausa' ? 'Riprendi' : 'Pausa'}</button><button className="btn primary" onClick={onStart}>{status === 'In ascolto' ? 'Termina sessione' : 'Inizia a parlare'}</button></div></div></div></section>;
+  return <section className="center"><canvas ref={orbRef} className="orb" aria-hidden="true" /><div className="panel p-in"><div className="panel-h">Input streaming</div><div className="spk"><span className="av">Tu</span><span>Tu</span><span className="id">speaker 0 · voce riconosciuta</span><span className="levels">▂▅▇▅▂</span></div><div className={`live-text ${liveInput ? '' : 'idle'}`}>{liveInput || 'In attesa della tua voce…'}</div>{!isDeviceConversation && <form onSubmit={submit}><input className="textin" value={text} onChange={(event) => setText(event.target.value)} placeholder="Oppure scrivi e premi Invio" /></form>}<div className="tags"><span className="tag ent"><b>ENT</b> VoiceMem</span><span className="tag emo"><b>EMO</b> curiosità</span></div></div><div className="panel p-recall"><div className="panel-h">Recupero Top-K</div><div className="recall-cols"><Recall title="Sinistro · fatti" items={recall.left || []} side="l" /><Recall title="Destro · profilo" items={recall.right || []} side="r" /></div></div><div className="panel p-out"><div className="panel-h">Risposta AI</div><div className={`reply ${reply.startsWith('Nessuna') ? 'idle' : ''}`}>{reply}</div>{!isDeviceConversation && <div className="out-foot"><div className="voice"><canvas ref={waveRef} className="wave" /><span className="lab">{status}</span></div><div className="btns"><button className="btn" onClick={onPause} disabled={status === 'Inattivo'}>{status === 'In pausa' ? 'Riprendi' : 'Pausa'}</button><button className="btn primary" onClick={onStart}>{status === 'In ascolto' ? 'Termina sessione' : 'Inizia a parlare'}</button></div></div>}</div></section>;
 }

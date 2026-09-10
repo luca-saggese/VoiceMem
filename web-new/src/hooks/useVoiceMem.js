@@ -198,8 +198,16 @@ export function useVoiceMem() {
   const close = useCallback(() => {
     stopMic(); stopPlayback();
     if (socket.current) { socket.current.onclose = null; socket.current.close(); socket.current = null; }
-    setLive(false); setPaused(false); setStatus('Inattivo');
+    setLive(false); setPaused(false); setActiveDeviceId(''); setStatus('Inattivo');
   }, [stopMic]);
+
+  const selectSession = useCallback((nextSessionId) => {
+    if (nextSessionId === sessionIdRef.current) return;
+    if (live || socket.current) close();
+    setSessionId(nextSessionId);
+    setLiveInput('');
+    setReply('Nessuna risposta ancora.');
+  }, [close, live]);
 
   const start = useCallback(async (device = null) => {
     if (live && !device) { close(); return; }
@@ -334,11 +342,12 @@ export function useVoiceMem() {
 
   const createSession = useCallback(() => {
     const id = `session-${Date.now()}`;
+    if (live || socket.current) close();
     setSessions((current) => [...current, { id, title: 'Nuova conversazione', turns: [] }]);
     setSessionId(id);
     setLiveInput('');
     setReply('Nessuna risposta ancora.');
-  }, []);
+  }, [close, live]);
 
-  return { spaces, spaceId, setSpaceId, sessions, sessionId, setSessionId, liveInput, reply, recall, status, live, paused, audioLevel, activeMemoryIds, activeDeviceId, sendText, start, selectDevice, togglePause, createSession, loadMemories };
+  return { spaces, spaceId, setSpaceId, sessions, sessionId, setSessionId, selectSession, liveInput, reply, recall, status, live, paused, audioLevel, activeMemoryIds, activeDeviceId, sendText, start, selectDevice, togglePause, createSession, loadMemories };
 }
